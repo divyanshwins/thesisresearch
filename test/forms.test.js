@@ -7,9 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { loadEngine } = require('../dev/gas-mock');
-
-const E = loadEngine();
+const E = require('../backend/engine');
 const ctx = { window: {} };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../docs/assets/questions.js'), 'utf8'), ctx);
@@ -103,6 +101,18 @@ test('funnel order: nothing before the safety block mentions safety or a threat,
   }
   assert.ok(textOf([pagesA[iSafety]]).includes('safe'), 'the safety block discloses its topic');
   assert.ok(/safety/.test(Q.formA.debrief), 'the debrief explains the order');
+});
+
+test('no secret is in the repository: no GitHub token, and the researcher key only as the local dev key', () => {
+  const files = require('child_process').execFileSync('git', ['ls-files', '-co', '--exclude-standard'], { cwd: path.join(__dirname, '..') }).toString().trim().split('\n');
+  for (const f of files) {
+    const p = path.join(__dirname, '..', f);
+    if (!fs.existsSync(p) || fs.statSync(p).size > 2e6) continue;
+    const text = fs.readFileSync(p, 'utf8');
+    assert.ok(!/\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}/.test(text), f + ' contains something that looks like a GitHub token');
+    // the tests set made-up keys for the code they test; nothing else may set one
+    if (!f.startsWith('test/')) assert.ok(!/RESEARCHER_KEY\s*[:=]\s*['"][^'"]{16,}/.test(text), f + ' sets a researcher key');
+  }
 });
 
 test('the home page, where Back on the first page can lead, says nothing about safety either', () => {

@@ -1,19 +1,15 @@
 /*
- * api.js: talks to the backend. POST bodies are sent as text/plain so the
- * browser does not need a CORS preflight, which Apps Script cannot answer.
+ * api.js: talks to the backend at /api on the same site. POST bodies are sent as text/plain.
  */
 (function () {
   'use strict';
 
-  var NOT_CONNECTED = 'This copy is not connected to the study’s backend yet (apiUrl in assets/config.js).';
+  var NOT_CONNECTED = 'This copy has no backend address (apiUrl in assets/config.js).';
   function apiUrl() {
     var u = window.APP_CONFIG && window.APP_CONFIG.apiUrl;
     return u && u.indexOf('PASTE_') !== 0 ? u : null;
   }
-  // With no backend address the forms run as a preview from assets/preview.js:
-  // they work page by page, say so on every page, and send nothing.
-  // ?preview=1 shows the same preview on a connected copy, for showing the format to someone.
-  var preview = !!window.PREVIEW_CONFIG && (!apiUrl() || /[?&]preview=1(&|$)/.test(location.search));
+  function copy(x) { return JSON.parse(JSON.stringify(x)); }
 
   function parse(res) {
     if (!res.ok) throw new Error('The server answered with status ' + res.status + '.');
@@ -26,9 +22,18 @@
   // Both return a promise in every case, so a missing address reaches the page's error message
   // instead of leaving it on "Loading".
   function get(action) {
-    if (preview && action === 'config') return Promise.resolve(JSON.parse(JSON.stringify(window.PREVIEW_CONFIG)));
+    if (API.preview && action === 'config') return Promise.resolve(copy(window.PREVIEW_CONFIG));
     if (!apiUrl()) return Promise.reject(new Error(NOT_CONNECTED));
-    return fetch(apiUrl() + '?action=' + encodeURIComponent(action), { method: 'GET', redirect: 'follow', cache: 'no-store' }).then(parse);
+    return fetch(apiUrl() + '?action=' + encodeURIComponent(action), { method: 'GET', redirect: 'follow', cache: 'no-store' }).then(parse).then(function (data) {
+      // The backend is deployed but its storage is not set up yet (secrets missing in Vercel):
+      // nothing can be saved, so the forms run as the labelled preview. Any other failure is shown as an error.
+      if (action === 'config' && data.configured === false) {
+        API.connected = false;
+        API.missing = data.missing || [];
+        if (window.PREVIEW_CONFIG) { API.preview = true; return copy(window.PREVIEW_CONFIG); }
+      }
+      return data;
+    });
   }
 
   function post(body) {
@@ -57,5 +62,12 @@
     remove: function (k) { try { localStorage.removeItem(k); } catch (e) { /* storage unavailable */ } }
   };
 
-  window.API = { get: get, post: post, uuid: uuid, store: store, preview: preview, connected: !!apiUrl() };
+  // ?preview=1 shows the preview on a connected copy, for showing the format to someone.
+  var API = {
+    get: get, post: post, uuid: uuid, store: store,
+    preview: !!window.PREVIEW_CONFIG && (!apiUrl() || /[?&]preview=1(&|$)/.test(location.search)),
+    connected: !!apiUrl(),
+    missing: []
+  };
+  window.API = API;
 })();

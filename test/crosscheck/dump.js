@@ -3,8 +3,7 @@
 // independent Python re-implementation in crosscheck.py to compare against.
 const fs = require('fs');
 const path = require('path');
-const { loadEngine } = require('../../dev/gas-mock');
-const E = loadEngine();
+const E = require('../../backend/engine');
 
 const K = 12, uTrue = [1.0, 0.8, 0.6, 0.45, 0.3, 0.15, 0, -0.15, -0.3, -0.6, -0.9, -1.35];
 const rand = E.rng(99), design = E.cyclicDesign(K, 4), obs = [];

@@ -1,10 +1,10 @@
 /**
- * Engine.gs: every calculation used by the study, as pure functions.
+ * engine.js: every calculation used by the study, as pure functions.
  *
- * The same file runs unchanged in Google Apps Script (V8 runtime), in Node
- * (tests and the local dev server) and in a browser. It uses no Apps Script
- * services. Each method is documented with its source in METHODS.md; the
- * section numbers below (M1, M2, ...) refer to that file.
+ * The same file runs unchanged on the server (the Vercel function, the
+ * local preview server and the tests) and in a browser. It does no input or
+ * output of its own. Each method is documented with its source in METHODS.md;
+ * the section numbers below (M1, M2, ...) refer to that file.
  */
 var Engine = (function () {
   'use strict';

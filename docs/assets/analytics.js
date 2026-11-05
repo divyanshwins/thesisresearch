@@ -1,6 +1,6 @@
 /*
  * analytics.js: researcher dashboard. Every number shown is computed by
- * backend/Engine.gs; this page only displays it, collects coding decisions
+ * backend/engine.js; this page only displays it, collects coding decisions
  * and builds CSV exports.
  */
 (function () {
@@ -111,16 +111,18 @@
     app.textContent = '';
     app.appendChild(bar());
     if (!API.connected) {
+      var missing = API.missing && API.missing.length ? API.missing.join(' and ') : 'GITHUB_TOKEN and RESEARCHER_KEY';
       app.appendChild(h('div', { class: 'panel login' }, [
         h('h1', { text: 'Analytics' }),
-        h('p', { class: 'muted', text: 'This copy is not connected to the study’s backend yet, so there are no results to show. Analytics opens here once apiUrl in assets/config.js holds the Apps Script web-app address.' })
+        h('p', { class: 'muted', text: 'The study is not connected to its storage yet, so nothing is being saved and there are no results to show. Set ' + missing +
+          ' in Vercel (Project → Settings → Environment Variables), then redeploy. Until then the forms run as a labelled preview.' })
       ]));
       return;
     }
     var input = h('input', { type: 'password', id: 'key', autocomplete: 'current-password' });
     var form = h('form', { class: 'panel login' }, [
       h('h1', { text: 'Analytics' }),
-      h('p', { class: 'muted', text: 'Enter the researcher key printed by setup() in the Apps Script log. It is kept only for this browser tab.' }),
+      h('p', { class: 'muted', text: 'Enter the researcher key (RESEARCHER_KEY in Vercel). It is kept only for this browser tab.' }),
       h('label', { for: 'key', class: 'small', text: 'Researcher key' }), input,
       error ? h('p', { class: 'notice error', text: error }) : null,
       h('div', { class: 'nav' }, [h('button', { class: 'btn primary', type: 'submit', text: 'Open' })])
@@ -623,7 +625,23 @@
       h('div', { class: 'row', style: 'margin-bottom:12px' }, [search, loadBtn]),
       S.raw ? h('p', { class: 'muted small', text: 'Answers as loaded at ' + S.raw.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' }) : null,
       shown.length ? table(['Form', 'Received', 'Email', 'Name', 'In the analysis?', 'Answers'], rows) : h('p', { class: 'muted', text: all.length ? 'No response matches.' : 'No responses yet.' })
-    ], 'Oldest first. Each woman counts once in each form: a later response from the same email is kept in the Sheet but left out of the analysis. To delete someone’s answers on request, find her email here, then delete those rows in the Google Sheet (FormA and FormB tabs).'));
+    ], 'Oldest first. Each woman counts once in each form: a later response from the same email is kept in the data but left out of the analysis.'));
+
+    // withdrawal on request, as the consent page promises
+    var wEmail = h('input', { type: 'email', class: 'inline grow', placeholder: 'Her email address', 'aria-label': 'Email address to remove', autocomplete: 'off' });
+    var wAgain = h('input', { type: 'email', class: 'inline grow', placeholder: 'The same address again', 'aria-label': 'Type the email address again to confirm', autocomplete: 'off' });
+    main.appendChild(panel('Remove someone’s answers', [
+      h('div', { class: 'row' }, [wEmail, wAgain, h('button', { class: 'btn small danger', type: 'button', text: 'Remove', onclick: function () {
+        var e = wEmail.value.trim().toLowerCase();
+        if (!e) return;
+        var n = all.filter(function (r) { return r.email === e; }).length;
+        if (!window.confirm('Delete ' + plural(n, 'response', 'responses') + ' from ' + e + ' from the data? This cannot be undone.')) return;
+        act({ action: 'withdraw', email: e, confirm: wAgain.value.trim().toLowerCase() }).then(function (r) {
+          S.flash = plural(r.removed, 'response', 'responses') + ' from ' + e + ' deleted.';
+          S.raw = null; load();
+        }).catch(function () {});
+      } })])
+    ], 'For a withdrawal request. Every response from that email, in both forms, is deleted from the data repository and leaves the analysis at once. Git keeps a copy in the repository’s history until the repository is deleted at the end of the study (see README). If Form B was already frozen from her Form A list, say so in the report.'));
   }
 
   // ---------------------------------------------------------------- export
@@ -634,8 +652,8 @@
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
   function csv(headers, rows) { return '﻿' + [headers].concat(rows).map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n'; }
-  function download(name, text, type) {
-    var blob = new Blob([text], { type: type || 'text/csv;charset=utf-8' });
+  function download(name, content, type) {
+    var blob = content instanceof Blob ? content : new Blob([content], { type: type || 'text/csv;charset=utf-8' });
     var a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -663,10 +681,11 @@
     add('A', QS.formA.pages);
     add('B', [QS.formB.consent, QS.formB.eligibility, QS.formB.travel, QS.formB.debrief]);
     rows.push(['B', 'B3', 'bws', 'best-worst', 'set0…', QS.formB.stem.replace(/\*\*/g, ''), 'see formB_choices_long.csv']);
-    return csv(['form', 'code', 'field', 'type', 'page', 'wording', 'values'], rows);
+    return { headers: ['form', 'code', 'field', 'type', 'page', 'wording', 'values'], rows: rows };
   }
 
-  function buildExports(d) {
+  /** Every export table, by file name: { sheet (Excel sheet name), headers, rows }. CSV files and the Excel workbook are both built from these. */
+  function buildTables(d) {
     var codeLabel = {};
     d.codes.forEach(function (c) { codeLabel[c.id] = c.label; });
     codeLabel[EXCLUDE] = 'Not about a road (excluded)';
@@ -677,21 +696,24 @@
     var norm = function (s) { return String(s).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim(); };
     var versions = {};
     (d.config.history || []).forEach(function (v) { versions[v.designVersion] = v; });
-    var files = {};
+    var tables = {};
+    function add(file, sheet, headers, rows) { tables[file] = { sheet: sheet, headers: headers, rows: rows }; }
     // the analysis status shown in the dashboard (kept, test, repeat, formA, otherVersion, closed), by record
     var status = {};
     (S.res.respondents || []).forEach(function (p) { status[p.form + '|' + p.id] = p; });
     function st(r) { var p = status[r.form + '|' + r.id]; return p ? p.status : ''; }
+    var byTime = function (x, y) { return x.receivedAt < y.receivedAt ? -1 : x.receivedAt > y.receivedAt ? 1 : 0; };
+    d.formA.sort(byTime); d.formB.sort(byTime);
     // Pseudonymised files: answers are linked to a person only through respondentId, and the emails and
     // names sit in one separate file, so every other file can be shared without identifying anyone.
-    files['respondents_by_email.csv'] = csv(['form', 'respondentId', 'email', 'name', 'receivedAt', 'test', 'designVersion', 'analysisStatus', 'flags'],
+    add('respondents_by_email', 'Respondents by email (private)', ['form', 'respondentId', 'email', 'name', 'receivedAt', 'test', 'designVersion', 'analysisStatus', 'flags'],
       d.formA.concat(d.formB).map(function (r) {
         var p = status[r.form + '|' + r.id];
         return [r.form, r.id, r.email, r.name, r.receivedAt, r.test, r.designVersion, p ? p.status : '', p ? p.flags : ''];
       }));
     var aHead = ['respondentId', 'receivedAt', 'formVersion', 'test', 'analysisStatus', 'sameDeviceRepeat', 'durationSec', 'age',
       'changedAny'].concat(boxes('listAny'), ['listAnyNothing', 'changedSafety', 'storySafety', 'timeSafety'], boxes('listSafety'), ['listSafetyNothing'], TRAVEL, ['unclear']);
-    files['formA_respondents.csv'] = csv(aHead, d.formA.map(function (r) {
+    add('formA_respondents', 'Form A responses', aHead, d.formA.map(function (r) {
       var x = r.answers;
       return [r.id, r.receivedAt, r.formVersion, r.test, st(r), r.sameDeviceRepeat, duration(r), x.age, x.changedAny]
         .concat(pad(x.listAny, 10), [x.listAnyNothing, x.changedSafety, x.storySafety, x.timeSafety], pad(x.listSafety, 10),
@@ -706,8 +728,8 @@
         });
       });
     });
-    files['formA_freelists_long.csv'] = csv(['respondentId', 'test', 'analysisStatus', 'list', 'positionAsWritten', 'entry', 'normalisedKey', 'code1', 'code1Label', 'code2', 'code2Label'], long);
-    files['formB_respondents.csv'] = csv(['respondentId', 'receivedAt', 'formVersion', 'test', 'designVersion', 'analysisStatus', 'sameDeviceRepeat', 'sameDeviceFormA', 'durationSec', 'age'].concat(TRAVEL, ['unclearItems', 'missingItems', 'setsSkipped']),
+    add('formA_freelists_long', 'Form A list entries', ['respondentId', 'test', 'analysisStatus', 'list', 'positionAsWritten', 'entry', 'normalisedKey', 'code1', 'code1Label', 'code2', 'code2Label'], long);
+    add('formB_respondents', 'Form B responses', ['respondentId', 'receivedAt', 'formVersion', 'test', 'designVersion', 'analysisStatus', 'sameDeviceRepeat', 'sameDeviceFormA', 'durationSec', 'age'].concat(TRAVEL, ['unclearItems', 'missingItems', 'setsSkipped']),
       d.formB.map(function (r) {
         var x = r.answers;
         return [r.id, r.receivedAt, r.formVersion, r.test, r.designVersion, st(r), r.sameDeviceRepeat, r.sameDeviceFormA, duration(r), x.age].concat(TRAVEL.map(function (k) { return x[k]; }),
@@ -723,47 +745,77 @@
         });
       });
     });
-    files['formB_choices_long.csv'] = csv(['respondentId', 'test', 'designVersion', 'analysisStatus', 'setOrder', 'designSet', 'position', 'item', 'itemLabel', 'best', 'worst', 'setSkipped', 'msOnSet'], choices);
+    add('formB_choices_long', 'Form B choices', ['respondentId', 'test', 'designVersion', 'analysisStatus', 'setOrder', 'designSet', 'position', 'item', 'itemLabel', 'best', 'worst', 'setSkipped', 'msOnSet'], choices);
     var used = {};
     d.assignments.forEach(function (a) { if (a.coder === 1) (asList(a.code) === EXCLUDE ? [EXCLUDE] : asList(a.code)).forEach(function (c) { used[c] = (used[c] || 0) + 1; }); });
-    files['codebook.csv'] = csv(['codeId', 'label', 'description', 'scope', 'entriesCodedByCoder1'], d.codes.map(function (c) { return [c.id, c.label, c.description, c.scope, used[c.id] || 0]; }));
-    files['data_dictionary.csv'] = dataDictionary();
+    add('codebook', 'Codebook', ['codeId', 'label', 'description', 'scope', 'entriesCodedByCoder1'], d.codes.map(function (c) { return [c.id, c.label, c.description, c.scope, used[c.id] || 0]; }));
     var res = S.res;
     if (res.formB.open && res.formB.ranking) {
       var seqRanks = res.formB.sequential && res.formB.sequential.ranks;
-      files['results_ranking.csv'] = csv(['rank', 'item', 'label', 'weight', 'weightLo95', 'weightHi95', 'utility', 'se', 'bwStd', 'best', 'worst', 'shown', 'rankLo95', 'rankHi95', 'pRankedFirst', 'rankSequentialModel', 'basis'],
+      add('results_ranking', 'Final ranking', ['rank', 'item', 'label', 'weight', 'weightLo95', 'weightHi95', 'utility', 'se', 'bwStd', 'best', 'worst', 'shown', 'rankLo95', 'rankHi95', 'pRankedFirst', 'rankSequentialModel', 'basis'],
         res.formB.ranking.map(function (r) { return [r.rank, r.item + 1, r.label, r.weight, r.weightLo, r.weightHi, r.utility, r.se, r.std, r.best, r.worst, r.shown, r.rankLo, r.rankHi, r.pTop, seqRanks ? seqRanks[r.item] : '', res.formB.rankingBasis]; }));
     }
-    files['results_salience_A34.csv'] = csv(['rank', 'codeId', 'label', 'scope', 'smithS', 'sutropCSI', 'freq', 'pct', 'meanPos'],
+    add('results_salience_A34', 'Salience A3.4', ['rank', 'codeId', 'label', 'scope', 'smithS', 'sutropCSI', 'freq', 'pct', 'meanPos'],
       res.formA.salience.safety.codedRows.map(function (r, i) { return [i + 1, r.code, r.label, r.scope, r.smithS, r.sutropCSI, r.freq, r.pct, r.meanPos]; }));
-    return files;
+    var dict = dataDictionary();
+    add('data_dictionary', 'Data dictionary', dict.headers, dict.rows);
+    return tables;
+  }
+
+  /** The first sheet of each workbook: what it is and how to read it. */
+  function aboutSheet(withEmails, generatedAt) {
+    var rows = [
+      ['Study', 'Road choice study (Form A elicitation, Form B best-worst ranking)'],
+      ['Downloaded', new Date().toLocaleString()],
+      ['Results computed', new Date(generatedAt).toLocaleString()],
+      ['This copy', withEmails ? 'PRIVATE: contains email addresses and names (sheet "Respondents by email"). Never share or upload it, and delete it when the study ends.' : 'Shareable: no emails or names. Answers are linked only by a random respondentId.'],
+      ['analysisStatus', 'kept = in the analysis; test = a ?test=1 response; repeat = a later response from the same email; formA = a Form B response from someone who answered Form A; otherVersion = an earlier Form B list; closed = Form B not open'],
+      ['Codes', 'Question codes (A2.1, A3.4 …) and field names are listed in "Data dictionary".']
+    ];
+    return { name: 'About', headers: ['Item', 'Detail'], rows: rows };
   }
 
   function renderExport(main) {
-    main.appendChild(titleRow('Export', 'Every raw table in long format, the codebook, a data dictionary and the current results, ready for R, Stata or SPSS.'));
+    main.appendChild(titleRow('Export', 'Everything in one Excel workbook, or each table as a CSV file for R, Stata or SPSS.'));
     var status = h('p', { class: 'muted small' });
     var listEl = h('div');
-    var btn = h('button', { class: 'btn primary', type: 'button', text: 'Prepare export files', onclick: function () {
+    var btn = h('button', { class: 'btn primary', type: 'button', text: 'Prepare the files', onclick: function () {
       status.textContent = 'Preparing…';
       act({ action: 'exportData' }).then(function (d) {
-        var files = buildExports(d);
+        var tables = buildTables(d), names = Object.keys(tables), stamp = new Date().toISOString().slice(0, 10);
+        function sheets(withEmails) {
+          return [aboutSheet(withEmails, S.res.generatedAt)].concat(names.filter(function (n) { return withEmails || n !== 'respondents_by_email'; })
+            .map(function (n) { return { name: tables[n].sheet, headers: tables[n].headers, rows: tables[n].rows }; }));
+        }
+        var files = {};
+        files['road_choice_study_' + stamp + '_PRIVATE_with_emails.xlsx'] = function () { return window.XLSX_WRITER.workbook(sheets(true)); };
+        files['road_choice_study_' + stamp + '_shareable.xlsx'] = function () { return window.XLSX_WRITER.workbook(sheets(false)); };
+        names.forEach(function (n) { files[n + '.csv'] = function () { return csv(tables[n].headers, tables[n].rows); }; });
         // the results without the list of emails, so this file can be shared
-        var shareable = {};
-        Object.keys(S.res).forEach(function (k) { if (k !== 'respondents') shareable[k] = S.res[k]; });
-        files['results.json'] = JSON.stringify(shareable, null, 2);
-        status.textContent = 'Ready. Each CSV is UTF-8 and opens in Excel, R, SPSS or Stata.';
+        files['results.json'] = function () {
+          var shareable = {};
+          Object.keys(S.res).forEach(function (k) { if (k !== 'respondents') shareable[k] = S.res[k]; });
+          return new Blob([JSON.stringify(shareable, null, 2)], { type: 'application/json' });
+        };
+        status.textContent = 'Ready. The Excel workbooks open in Excel, Numbers and Google Sheets; each CSV is UTF-8.';
         listEl.textContent = '';
         listEl.appendChild(table(['File', ''], Object.keys(files).map(function (name) {
-          return [name, h('button', { class: 'btn small secondary', type: 'button', text: 'Download', onclick: function () { download(name, files[name], /\.json$/.test(name) ? 'application/json' : null); } })];
+          return [name, h('button', { class: 'btn small secondary', type: 'button', text: 'Download', onclick: function () { download(name, files[name]()); } })];
         })));
       }).catch(function () { status.textContent = 'Export failed.'; });
     } });
     main.appendChild(panel('Files', [h('div', { class: 'row', style: 'margin-bottom:8px' }, [btn, status]), listEl],
-      'Emails and names are only in respondents_by_email.csv. Every other file links answers to a person through respondentId alone, so it can be shared; never share respondents_by_email.csv. Test responses are included and marked in a “test” column, and analysisStatus says whether each response is in the analysis shown on this page (kept) or why not. In the free-list file, a split entry lists its codes joined by “+”, in the order coded.'));
+      'The PRIVATE workbook has every sheet, including emails and names. The shareable workbook and every CSV except respondents_by_email.csv link answers to a person through respondentId alone, so they can be shared. Test responses are included and marked in a “test” column, and analysisStatus says whether each response is in the analysis shown on this page (kept) or why not. In the free-list table, a split entry lists its codes joined by “+”, in the order coded.'));
   }
 
   // ---------------------------------------------------------------- start
   window.addEventListener('beforeunload', function (e) { if (pendingCount()) { e.preventDefault(); e.returnValue = ''; } });
-  var saved = session('researcherKey');
-  if (saved) { S.key = saved; app.appendChild(bar()); app.appendChild(h('p', { class: 'canvas muted', text: 'Loading results…' })); load(); } else login();
+  app.appendChild(bar());
+  app.appendChild(h('p', { class: 'canvas muted', text: 'Loading…' }));
+  // the config call says whether the backend's storage is set up; only then is the key asked for
+  API.get('config').then(function () {
+    var saved = session('researcherKey');
+    if (!API.connected || !saved) { login(); return; }
+    S.key = saved; load();
+  }).catch(function (err) { login('The backend could not be reached: ' + err.message); });
 })();

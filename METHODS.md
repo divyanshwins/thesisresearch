@@ -1,6 +1,6 @@
 # Methods: what the system calculates, and the source for each step
 
-This file is the academic justification for every number the analytics page shows and for every design decision in the two forms. Section numbers (M1–M14) match the comments in `backend/Engine.gs`, where all the calculations run.
+This file is the academic justification for every number the analytics page shows and for every design decision in the two forms. Section numbers (M1–M14) match the comments in `backend/engine.js`, where all the calculations run.
 
 **How the calculations are checked**
 - `test/engine.test.js` checks each calculation against a hand-worked example or a published value.
@@ -74,7 +74,7 @@ The two episode questions and the two lists look alike on purpose: asking the sa
 ### Email address: one response per person, and two separate samples
 - **What is asked.** An email address (required) and a name (optional), on the "About you" page, after the three screening questions, so that a woman who is screened out is never asked for them.
 - **What it is for.**
-  - **One response per person.** A later response from the same email is kept in the Sheet but left out of the analysis, and her first response is used. In Form A this is the one given before she had seen the safety block, so it is the only one whose first list is unprimed.
+  - **One response per person.** A later response from the same email is kept in the data but left out of the analysis, and her first response is used. In Form A this is the one given before she had seen the safety block, so it is the only one whose first list is unprimed.
   - **Two separate samples.** Form B is meant for women who did not answer Form A, because Form A respondents have already listed and thought about these features. A Form B response whose email matches a real Form A response is left out of the ranking and counted. Before, this rested on a self-report question and a device mark, which can only flag it.
   - **Withdrawal.** A woman can ask for her answers to be deleted, which is impossible with anonymous data.
 - **Matching rule.** Emails are trimmed and compared in lower case. Tests are matched only with tests, and a Form B test is checked only against real Form A responses, so a trial run never removes a real response.
@@ -220,7 +220,7 @@ Spearman's ρ (the Pearson correlation of ranks, with ties given their average r
 - **Left out of the Form B ranking, and counted** (see the email section): a repeat from the same email, and a woman whose email is in Form A. These are rules of the design, not sensitivity checks.
 - **Sensitivity analysis.** Respondents flagged for speed **stay in** the main ranking. The model is re-run without them and the agreement is reported.
 - **Test responses.** Responses sent with `?test=1` are stored but never analysed. The analytics page can include test responses on request, to check that the forms reach the analysis; it then says so in a banner, and the freeze always runs on real responses only.
-- **Respondents tab.** Every stored response is listed by email with the reason it is in or out of the analysis, and its answers can be opened. This is where a withdrawal request is found.
+- **Respondents tab.** Every stored response is listed by email with the reason it is in or out of the analysis, and its answers can be opened. A withdrawal request is carried out there: every response from that email is deleted.
 
 ### M14. Position check ◻ (test) / ✔ (calibrated here)
 - **What is counted.** Choices of most and least by screen position. With randomised order, each position should be chosen about equally often.
@@ -232,6 +232,42 @@ Spearman's ρ (the Pearson correlation of ranks, with ties given their average r
 Sample quantiles use Hyndman & Fan (1996) type 7 (the default in R and NumPy), and type 1 for ranks. The test values match NumPy's implementations of the same definitions (`linear` and `inverted_cdf`); R itself was not run.
 
 ---
+
+## Data storage and security
+
+**Where the data is.**
+- **The answers** are kept in a private GitHub repository, `thesisresearch-data`, separate from the code. Each response is one JSON file, written once.
+- **The settings** (codebook, coding, freeze and its history) are one file, `state.json`.
+- **The backend** is a Vercel function (`api/index.js`). It is the only thing that writes to that repository, using a fine-grained token limited to that one repository and to its contents. The token is held in Vercel's encrypted environment settings, never in the code or in a browser.
+
+**Audit trail.** Every response and every settings change is its own commit, so the repository history is a dated, tamper-evident record of:
+- when each response arrived;
+- when the list was frozen;
+- what each design version showed.
+
+Commit messages carry no email.
+
+**Integrity.**
+- **Answers are re-checked on the server.** The server never trusts the browser: it checks eligibility, the email format, allowed values, lengths and the Form B design.
+- **Each response is created once.** A resubmission with the same ID is recognised as a duplicate.
+- **Settings changes use optimistic locking.** A change made from out-of-date settings is refused rather than overwriting a newer one.
+- **The analysis reads everything at once.** It reads the whole repository in one archive download, so every refresh sees a consistent set of responses.
+
+**Confidentiality.** Access to answers and emails requires the researcher key, which is:
+- compared in constant time;
+- followed by a pause after each wrong attempt;
+- kept only for the open browser tab.
+
+**Pages.**
+- **Respondent text is shown as text, never as HTML.**
+- **A strict Content Security Policy** lets the pages run only their own scripts and connect only to their own site.
+- **The pages cannot be framed** by another site.
+
+**Retention.**
+- **When a woman withdraws,** her files are deleted at once. Git keeps them in the repository's history until the repository is deleted.
+- **When the study ends,** the shareable, pseudonymised export is kept and the data repository is deleted, as the consent says.
+
+**Checked by.** The storage code is tested against a stand-in GitHub API (`test/github-mock.js`). It is backed by a real git repository and uses `git archive`, the tool GitHub uses for its archives. The archive reader was also run on a real GitHub archive of this repository (all 30 files, byte for byte).
 
 ## What the simulations show (simulated data, not results)
 

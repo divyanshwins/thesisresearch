@@ -10,8 +10,7 @@
  *
  *   node dev/power.js            (about a minute)
  */
-const { loadEngine } = require('./gas-mock');
-const E = loadEngine();
+const E = require('../backend/engine');
 
 // assumed utilities: the same spread as dev/simulate.js (a moderate range of about 2 logits)
 const U = [1.1, 0.9, 0.7, 0.45, 0.35, 0.2, 0.05, 0.0, -0.1, -0.3, -0.6, -0.8];

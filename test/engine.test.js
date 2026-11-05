@@ -1,10 +1,9 @@
 'use strict';
-// Hand-worked checks for every calculation in backend/Engine.gs.
+// Hand-worked checks for every calculation in backend/engine.js.
 // Each expected value is worked out by hand in the comment beside it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadEngine } = require('../dev/gas-mock');
-const E = loadEngine();
+const E = require('../backend/engine');
 
 // Objects built inside the vm sandbox have their own prototypes, so compare plain copies.
 const same = (actual, expected, msg) => assert.deepStrictEqual(JSON.parse(JSON.stringify(actual)), expected, msg || 'values differ');

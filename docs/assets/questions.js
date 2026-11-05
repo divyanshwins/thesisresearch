@@ -1,7 +1,7 @@
 /*
  * questions.js: the exact wording of Form A and Form B, in one place.
  * Wording follows Women_Road_Choice_Questionnaire.md. Answer values must
- * match Engine.OPTIONS in backend/Engine.gs, and field ids must match the
+ * match Engine.OPTIONS in backend/engine.js, and field ids must match the
  * fields Engine.validateA / validateB store (test/forms.test.js checks both).
  * **Double asterisks** mark the few words shown in bold.
  */
