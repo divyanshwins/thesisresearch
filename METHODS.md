@@ -79,7 +79,7 @@ The two episode questions and the two lists look alike on purpose: asking the sa
   - **Withdrawal.** A woman can ask for her answers to be deleted, which is impossible with anonymous data.
 - **Matching rule.** Emails are trimmed and compared in lower case. Tests are matched only with tests, and a Form B test is checked only against real Form A responses, so a trial run never removes a real response.
 - **The device marks** (this browser had submitted a form before) are still stored but no longer used, because a phone is often shared and the email tells people apart.
-- **Confidential, not anonymous.** The email and name are stored beside the answers, not in them. In the exports they are only in `respondents_by_email.csv`; every other file links answers to a person through a random respondent ID alone (pseudonymised), so it can be shared. Only the researcher key opens them. The emails must be deleted when the study ends, as the consent says.
+- **Confidential, not anonymous.** The email and name are stored beside the answers, not in them. In the exports they are only in `respondents_by_email.csv`; every other file links answers to a person through a random respondent ID alone (pseudonymised), so it can be shared. Only the researcher, signed in to Vercel at the study's private address, can open them. The emails must be deleted when the study ends, as the consent says.
 - **Cost to state.** Identified responses can lower reporting on sensitive topics compared with anonymous ones (Tourangeau & Yan 2007 ◻). The forms ask about road features, not about incidents, which limits this. Report it as a limitation.
 - **Format check.** The same pattern is used in the form and on the server (something@domain.tld, no spaces, at most 254 characters, the longest deliverable address under RFC 5321 ◻). A typo in an otherwise valid address cannot be caught.
 
@@ -236,27 +236,29 @@ Sample quantiles use Hyndman & Fan (1996) type 7 (the default in R and NumPy), a
 ## Data storage and security
 
 **Where the data is.**
-- **The answers** are kept in a private GitHub repository, `thesisresearch-data`, separate from the code. Each response is one JSON file, written once.
+- **The answers** are kept in a private Vercel Blob store, `thesis-responses`, in Vercel's Mumbai region (bom1), the same region as the backend function. Each response is one JSON file, written once and never overwritten.
 - **The settings** (codebook, coding, freeze and its history) are one file, `state.json`.
-- **The backend** is a Vercel function (`api/index.js`). It is the only thing that writes to that repository, using a fine-grained token limited to that one repository and to its contents. The token is held in Vercel's encrypted environment settings, never in the code or in a browser.
+- **The backend** is a Vercel function (`api/index.js`). It is the only thing that reads or writes the store.
+- **The store's credentials** are issued and rotated by Vercel (OIDC), or are the store's own token, which Vercel adds to the project's encrypted settings when the store is connected. No credential is in the code, in the repository or in a browser.
 
-**Audit trail.** Every response and every settings change is its own commit, so the repository history is a dated, tamper-evident record of:
-- when each response arrived;
-- when the list was frozen;
-- what each design version showed.
+**Who can read it.** The researcher actions (results, coding, freeze, export, withdrawal) work only when the request:
+- arrives on one of the project's private Vercel addresses. Vercel Deployment Protection (Standard Protection, on by default) lets only the owner's Vercel account open those addresses;
+- comes from a page on that same address. The browser's Origin header is checked, so another website cannot send the request using the researcher's session;
+- finds Vercel's protection switched on. The function checks this itself by asking its own private address for a page without credentials. If the check fails, or cannot be made, access is refused (fail closed).
 
-Commit messages carry no email.
+The public address never opens results. There is no shared password to leak or guess.
 
 **Integrity.**
 - **Answers are re-checked on the server.** The server never trusts the browser: it checks eligibility, the email format, allowed values, lengths and the Form B design.
 - **Each response is created once.** A resubmission with the same ID is recognised as a duplicate.
-- **Settings changes use optimistic locking.** A change made from out-of-date settings is refused rather than overwriting a newer one.
-- **The analysis reads everything at once.** It reads the whole repository in one archive download, so every refresh sees a consistent set of responses.
+- **Settings changes are conditional writes.** A change made from out-of-date settings is refused, by an ETag check, rather than overwriting a newer one.
+- **The freeze records exactly what each Form B version showed**, kept in `state.json` with the time and the rule.
 
-**Confidentiality.** Access to answers and emails requires the researcher key, which is:
-- compared in constant time;
-- followed by a pause after each wrong attempt;
-- kept only for the open browser tab.
+**Free-plan allowance.** On Vercel's free plan the store allows 2,000 uploads and listings and 10,000 uncached reads a month. It is locked for 30 days if they are exceeded. The backend is designed to stay well inside this, and a test counts the operations:
+- each analysis lists the store once (reused for 20 seconds);
+- each response is downloaded only once;
+- form pages read the settings through the cache;
+- the analytics page does not refresh itself.
 
 **Pages.**
 - **Respondent text is shown as text, never as HTML.**
@@ -264,10 +266,13 @@ Commit messages carry no email.
 - **The pages cannot be framed** by another site.
 
 **Retention.**
-- **When a woman withdraws,** her files are deleted at once. Git keeps them in the repository's history until the repository is deleted.
-- **When the study ends,** the shareable, pseudonymised export is kept and the data repository is deleted, as the consent says.
+- **When a woman withdraws,** her files are deleted at once.
+- **When the study ends,** the shareable, pseudonymised export is kept and the store is deleted, as the consent says.
 
-**Checked by.** The storage code is tested against a stand-in GitHub API (`test/github-mock.js`). It is backed by a real git repository and uses `git archive`, the tool GitHub uses for its archives. The archive reader was also run on a real GitHub archive of this repository (all 30 files, byte for byte).
+**Checked by.**
+- **Locally.** The storage code is tested against a stand-in for the Vercel Blob SDK (`test/blob-fake.js`) that follows its documented behaviour (no overwrite without permission, ETag preconditions, paging) and counts billed operations.
+- **On the live site (5 November 2026).** A test response submitted at the public address was saved, read back at the private address and deleted by the withdrawal action. Results were refused at the public address, with a forged forwarding header, and without a matching Origin. A forged Host header was sent to Vercel's sign-in page.
+- **The alternative GitHub storage** (`backend/store-github.js`, used only if a GitHub token is configured) is tested against a stand-in GitHub API backed by a real git repository.
 
 ## What the simulations show (simulated data, not results)
 
