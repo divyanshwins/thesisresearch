@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const { createBackend } = require('../dev/gas-mock');
 
 const uuid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
-const elig = { consent: 'yes', gender: 'woman', age: '25_34', roads: 'yes', modes: ['foot'], frequency: 'daily', company: 'both', area: 'residential' };
+const mail = (n) => 'woman' + n + '@example.org';
+const elig = { consent: 'yes', gender: 'woman', age: '25_34', roads: 'yes', email: mail(0), modes: ['foot'], company: 'both', area: 'residential' };
 
 function fresh() {
   const b = createBackend(null);
@@ -35,7 +36,7 @@ function submitFormA(b, n) {
   const all = codeIds.flatMap((c) => words[c]);
   for (let i = 0; i < n; i++) {
     const list = [all[i % all.length], all[(i * 7 + 3) % all.length], all[(i * 5 + 1) % all.length]];
-    const r = b.post({ action: 'submitA', payload: { respondentId: uuid(i + 1), pageTimes: { p1: 1000 + i }, answers: { ...elig, changedAny: 'yes', listAny: ['traffic', list[0]], changedSafety: i % 3 ? 'yes' : 'no', listSafety: list } } });
+    const r = b.post({ action: 'submitA', payload: { respondentId: uuid(i + 1), pageTimes: { p1: 1000 + i }, answers: { ...elig, email: mail(i + 1), changedAny: 'yes', listAny: ['traffic', list[0]], changedSafety: i % 3 ? 'yes' : 'no', listSafety: list } } });
     assert.equal(r.ok, true, JSON.stringify(r));
   }
 }
@@ -58,6 +59,36 @@ test('Form A: valid submission stored once; duplicates and ineligible answers re
   assert.equal(b.post({ action: 'submitA', payload: { ...p, respondentId: uuid(3), hp: 'bot' } }).ok, true);
   assert.equal(b.store.data.sheets.FormA.length, 2, 'header + one response');
   assert.equal(b.postRaw('not json').ok, false);
+  // the email is required and must look like an address; it is stored in lower case beside the answers
+  assert.match(b.post({ action: 'submitA', payload: { ...p, respondentId: uuid(4), answers: { ...elig, email: '' } } }).error, /email/);
+  assert.match(b.post({ action: 'submitA', payload: { ...p, respondentId: uuid(5), answers: { ...elig, email: 'not an email' } } }).error, /email/);
+  assert.equal(b.post({ action: 'submitA', payload: { ...p, respondentId: uuid(6), answers: { ...elig, email: '  Asha.K@Example.ORG ', name: '  Asha  ' } } }).ok, true);
+  const stored = JSON.parse(b.store.data.sheets.FormA[2][0]);
+  assert.equal(stored.email, 'asha.k@example.org');
+  assert.equal(stored.name, 'Asha');
+  assert.ok(!('email' in stored.answers));
+});
+
+test('one response per person: a repeat from the same email is stored but left out, the first is kept', () => {
+  const b = fresh();
+  const send = (n, email, list, extra) => b.post({ action: 'submitA', payload: { respondentId: uuid(n), ...extra, answers: { ...elig, email, listSafety: list } } });
+  send(1, 'a@example.org', ['first answer']);
+  send(2, 'b@example.org', ['other woman']);
+  send(3, 'A@EXAMPLE.org', ['second answer']);                 // same person, different case
+  send(4, 'a@example.org', ['her test'], { test: true });       // a test from the same email never hides a real response
+  let res = b.post({ action: 'results', key: 'k' });
+  assert.equal(res.formA.n, 2);
+  assert.equal(res.formA.nRepeat, 1);
+  const keys = res.formA.coding.entries.map((e) => e.key);
+  assert.ok(keys.includes('first answer') && !keys.includes('second answer'), 'the first response is the one analysed');
+  const status = Object.fromEntries(res.respondents.map((r) => [r.id, r.status]));
+  assert.deepEqual(status, { [uuid(1)]: 'kept', [uuid(2)]: 'kept', [uuid(3)]: 'repeat', [uuid(4)]: 'test' });
+  assert.equal(res.respondents.find((r) => r.id === uuid(3)).email, 'a@example.org');
+  // with tests included, the test is the first test from that email, so it is kept
+  res = b.post({ action: 'results', key: 'k', includeTest: true });
+  assert.equal(res.formA.n, 3);
+  assert.equal(res.respondents.find((r) => r.id === uuid(4)).status, 'kept');
+  assert.equal(b.store.data.sheets.FormA.length, 5, 'nothing is deleted from the Sheet');
 });
 
 test('researcher actions need the key', () => {
@@ -116,15 +147,26 @@ test('full flow: code entries, freeze top 12, collect Form B, live ranking', () 
       const noisy = r % 5 === 0;
       return { set: s, shown, best: noisy ? sorted[1] : sorted[0], worst: sorted[3], ms: 4000 };
     });
-    const out = b.post({ action: 'submitB', payload: { respondentId: uuid(100 + r), designVersion: 1, answers: { ...elig, tookPartBefore: r === 3 ? 'yes' : 'no' }, bws, pageTimes: { s1: 4000 } } });
+    const out = b.post({ action: 'submitB', payload: { respondentId: uuid(100 + r), designVersion: 1, answers: { ...elig, email: mail(100 + r) }, bws, pageTimes: { s1: 4000 } } });
     assert.equal(out.ok, true, JSON.stringify(out));
   }
   assert.equal(b.post({ action: 'submitB', payload: { respondentId: uuid(999), designVersion: 2, answers: elig, bws: [] } }).ok, false);
+  // a Form A respondent who also answers Form B, and a second Form B response from the same email, are both left out
+  const oneSet = cfg.formB.sets.map((set, s) => ({ set: s, shown: set, best: set[3], worst: set[0], ms: 4000 }));
+  assert.equal(b.post({ action: 'submitB', payload: { respondentId: uuid(300), designVersion: 1, answers: { ...elig, email: mail(5) }, bws: oneSet } }).ok, true);
+  assert.equal(b.post({ action: 'submitB', payload: { respondentId: uuid(301), designVersion: 1, answers: { ...elig, email: mail(100) }, bws: oneSet } }).ok, true);
+  assert.equal(b.post({ action: 'submitB', payload: { respondentId: uuid(302), designVersion: 1, test: true, answers: { ...elig, email: mail(6) }, bws: oneSet } }).ok, true);
 
   res = b.post({ action: 'results', key: 'k' });
   assert.equal(res.formB.n, 40);
   assert.equal(res.formB.nAnswered, 40);
-  assert.equal(res.formB.sensitivity.byFlag.tookPartBefore, 1);
+  assert.equal(res.formB.nFormA, 1);
+  assert.equal(res.formB.nRepeat, 1);
+  assert.deepEqual(Object.keys(res.formB.sensitivity.byFlag), ['speed']);
+  const st = Object.fromEntries(res.respondents.filter((r) => r.form === 'B').map((r) => [r.id, r.status]));
+  assert.equal(st[uuid(300)], 'formA'); assert.equal(st[uuid(301)], 'repeat'); assert.equal(st[uuid(302)], 'test'); assert.equal(st[uuid(100)], 'kept');
+  // with tests included, a test from a Form A email is left out for the same reason
+  assert.equal(b.post({ action: 'results', key: 'k', includeTest: true }).respondents.find((r) => r.id === uuid(302)).status, 'formA');
   // these respondents choose deterministically, so the model is not estimable and the robustness model is not run
   assert.equal(res.formB.rankingBasis, 'counts');
   assert.equal(res.formB.sequential, null);
@@ -142,7 +184,7 @@ test('full flow: code entries, freeze top 12, collect Form B, live ranking', () 
   assert.equal(b.post({ action: 'freeze', key: 'k', k: 10 }).freeze.designVersion, 2);
   res = b.post({ action: 'results', key: 'k' });
   assert.equal(res.formB.n, 0);
-  assert.equal(res.formB.nOtherVersions, 40);
+  assert.equal(res.formB.nOtherVersions, 42, 'the 40 kept, the Form A respondent and the repeat; the test is counted as a test');
 
   // the audit trail of what each version showed: one row per version, exported with the config
   const hist = b.post({ action: 'exportData', key: 'k' }).config.history;
@@ -185,19 +227,20 @@ test('test-mode submissions are stored but left out of the analysis', () => {
 test('the largest possible Form A record fits in one Sheets cell', () => {
   const b = fresh();
   const long = '"'.repeat(2500), short = '"'.repeat(250);     // quotes double in JSON, the worst ordinary case
-  const answers = { ...elig, changedAny: 'yes', storyAny: long, actionsAny: ['other'], actionsAnyOther: short,
-    listAny: Array(12).fill(short), changedSafety: 'yes', storySafety: long, actionsSafety: ['other'], actionsSafetyOther: short, timeSafety: 'dark',
-    listSafety: Array(12).fill(short), afterDark: long, anythingElse: long, city: short, modesOther: short, unclear: long };
+  const answers = { ...elig, email: '"'.repeat(240) + '@example.org', name: '"'.repeat(100), changedAny: 'yes',
+    listAny: Array(12).fill(short), changedSafety: 'yes', storySafety: long, timeSafety: 'dark',
+    listSafety: Array(12).fill(short), city: short, modes: ['other'], modesOther: short, unclear: long };
   const pageTimes = Object.fromEntries(Array.from({ length: 50 }, (_, i) => ['page_' + i + '_xxxxxxxxxxxx', 86400000]));
   assert.equal(b.post({ action: 'submitA', payload: { respondentId: uuid(1), pageTimes, answers } }).ok, true);
   const cell = String(b.store.data.sheets.FormA[1][0]);
+  assert.equal(JSON.parse(cell).email.length, 252, 'a long but valid address is kept whole');
   assert.ok(cell.length < 50000, 'record is ' + cell.length + ' characters');
 });
 
 test('split entries: an entry coded with several codes, and deleting one of them', () => {
   const b = fresh();
-  b.post({ action: 'submitA', payload: { respondentId: uuid(1), answers: { ...elig, listSafety: ['Dark and empty', 'shops'] } } });
-  b.post({ action: 'submitA', payload: { respondentId: uuid(2), answers: { ...elig, listSafety: ['shops', 'dark and empty'] } } });
+  b.post({ action: 'submitA', payload: { respondentId: uuid(1), answers: { ...elig, email: mail(1), listSafety: ['Dark and empty', 'shops'] } } });
+  b.post({ action: 'submitA', payload: { respondentId: uuid(2), answers: { ...elig, email: mail(2), listSafety: ['shops', 'dark and empty'] } } });
   const codes = [{ id: 'c_light', label: 'How well lit the road is', description: 'Lights', scope: 'safety' },
     { id: 'c_people', label: 'How many people are around', description: 'People', scope: 'safety' },
     { id: 'c_shops', label: 'How many shops face the road', description: 'Shops', scope: 'safety' }];

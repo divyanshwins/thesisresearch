@@ -10,7 +10,8 @@
   var EXCLUDE = '__exclude__', MAX_CODES = 3, K_MIN = 8, K_MAX = 16, MIN_MENTIONS = 2;
   var PLANNED_B = (window.APP_CONFIG && window.APP_CONFIG.plannedSampleB) || 50;
   var S = { key: null, res: null, tab: 'ranking', coder: 1, pending: { 1: {}, 2: {} }, codeEdits: {}, deleted: {},
-            filter: 'uncoded', list: 'all', search: '', auto: false, timer: null, k: 12, busy: false, error: null, includeTest: false };
+            filter: 'uncoded', list: 'all', search: '', auto: false, timer: null, k: 12, busy: false, error: null, includeTest: false,
+            who: '', raw: null };
 
   // ---------------------------------------------------------------- helpers
   function session(k, v) {
@@ -129,7 +130,7 @@
     input.focus();
   }
 
-  var TABS = [['ranking', 'Final ranking'], ['formA', 'Form A'], ['coding', 'Coding'], ['setup', 'Form B setup'], ['quality', 'Quality'], ['export', 'Export']];
+  var TABS = [['ranking', 'Final ranking'], ['formA', 'Form A'], ['coding', 'Coding'], ['setup', 'Form B setup'], ['quality', 'Quality'], ['respondents', 'Respondents'], ['export', 'Export']];
 
   function render() {
     var res = S.res;
@@ -162,7 +163,7 @@
     }
     var main = h('div', { id: 'dash' });
     canvas.appendChild(main);
-    ({ ranking: renderRanking, formA: renderFormA, coding: renderCoding, setup: renderSetup, quality: renderQuality, export: renderExport })[S.tab](main, res);
+    ({ ranking: renderRanking, formA: renderFormA, coding: renderCoding, setup: renderSetup, quality: renderQuality, respondents: renderRespondents, export: renderExport })[S.tab](main, res);
   }
 
   // ---------------------------------------------------------------- final ranking
@@ -210,7 +211,7 @@
     var checks = [
       ['Model-free count scores', fb.agreementCountsVsModel !== null && fb.agreementCountsVsModel !== undefined ? 'Spearman ρ = ' + num(fb.agreementCountsVsModel, 3) : '–', 'Standardised best-minus-worst scores need no model (Louviere, Flynn & Marley 2015).'],
       ['Sequential best-then-worst model', seq && seq.spearman !== null ? 'Spearman ρ = ' + num(seq.spearman, 3) : seq ? seq.status : '–', 'Best chosen first, then worst from the rest (Marley & Louviere 2005; Dyachenko, Reczek & Allenby 2014).'],
-      ['Without flagged respondents', sens.nExcluded === 0 ? 'No one flagged' : sens.spearman !== undefined ? 'Spearman ρ = ' + num(sens.spearman, 3) + ' (' + sens.nKept + ' kept)' : 'Not estimable', 'Speed, earlier participation or a repeat device; see Quality.']
+      ['Without flagged respondents', sens.nExcluded === 0 ? 'No one flagged' : sens.spearman !== undefined ? 'Spearman ρ = ' + num(sens.spearman, 3) + ' (' + sens.nKept + ' kept)' : 'Not estimable', 'Leaves out respondents who answered about twice as fast as the median (speed index above 2); see Quality.']
     ];
     main.appendChild(panel('Does the order hold?', [table(['Check against the main model', { text: 'Agreement of the orders', num: true }, 'What it tests'], checks)],
       'Each line re-estimates the order another way. Values near 1 mean the ranking does not depend on that choice of method or sample.'));
@@ -244,9 +245,10 @@
       (sat.reached ? 'Saturation reached at respondent ' + sat.point + ' (' + sat.label + ', Guest, Namey & Chen 2020).' : 'Saturation not reached yet.')));
     var y = function (p) { return p.yes ? pct(p.yes.p, 0) : '–'; };
     main.appendChild(kpis([
-      ['Respondents', String(A.n), A.nTest ? plural(A.nTest, 'test response', 'test responses') + ' ' + testWord() : null],
+      ['Respondents', String(A.n), [A.nTest ? plural(A.nTest, 'test response', 'test responses') + ' ' + testWord() : null,
+        A.nRepeat ? plural(A.nRepeat, 'repeat', 'repeats') + ' from the same email left out' : null].filter(Boolean).join('; ') || null],
       ['Changed road, non-distance reason', y(pr.changedRoadAnyReason), pr.changedRoadAnyReason.yes ? '95% CI ' + pct(pr.changedRoadAnyReason.yes.lo, 0) + '–' + pct(pr.changedRoadAnyReason.yes.hi, 0) + ', n = ' + pr.changedRoadAnyReason.n : 'A2.1'],
-      ['Changed a trip because of safety', y(pr.changedRoadSafety), pr.changedRoadSafety.yes ? '95% CI ' + pct(pr.changedRoadSafety.yes.lo, 0) + '–' + pct(pr.changedRoadSafety.yes.hi, 0) + ', n = ' + pr.changedRoadSafety.n : 'A3.1'],
+      ['Changed road because of safety', y(pr.changedRoadSafety), pr.changedRoadSafety.yes ? '95% CI ' + pct(pr.changedRoadSafety.yes.lo, 0) + '–' + pct(pr.changedRoadSafety.yes.hi, 0) + ', n = ' + pr.changedRoadSafety.n : 'A3.1'],
       ['Unprimed lists naming safety', pr.unprimedMentionsSafety.ci ? pct(pr.unprimedMentionsSafety.ci.p, 0) : '–', 'before safety was mentioned, n = ' + pr.unprimedMentionsSafety.n]
     ]));
     var cov = A.coding.coverage.safety;
@@ -254,7 +256,7 @@
     var kids = [];
     if (eligible.length) kids.push(window.Charts.salienceCurve(eligible, sal.elbow ? sal.elbow.index : null, S.k));
     kids.push(salienceTable(sal.codedRows, S.k, false));
-    main.appendChild(panel('Salience of safety parameters (A3.5)', kids,
+    main.appendChild(panel('Salience of safety parameters (A3.4)', kids,
       "Smith's S = mean over the " + sal.N + ' non-empty lists of (L − R + 1) / L. ' + codedNote + (sal.elbow ? ' Elbow of the curve (Kneedle) at rank ' + sal.elbow.rank + '.' : '') +
       ' The rule under row ' + S.k + ' marks the Form B cut-off. Codes marked “not safety” are listed but not ranked.'));
 
@@ -270,30 +272,24 @@
 
     main.appendChild(panel('Hypothesis checks', [table(['Check', 'Result', { text: 'n', num: true }], [
       ['Chose a different road for a reason other than time or distance (A2.1, yes)', ci(pr.changedRoadAnyReason.yes), String(pr.changedRoadAnyReason.n)],
-      ['How safe a road felt changed a trip (A3.1, yes)', ci(pr.changedRoadSafety.yes), String(pr.changedRoadSafety.n)],
-      ['The unprimed list (A2.4) already names a safety parameter' + (pr.unprimedMentionsSafety.fullyCoded ? '' : ' (provisional: unprimed list not fully coded)'), ci(pr.unprimedMentionsSafety.ci), String(pr.unprimedMentionsSafety.n)],
-      ['Ticked “Nothing about a road changes my choice” (A2.4)', String(pr.saidNothingUnprimed), ''],
-      ['Ticked “Nothing about a road changes how safe it feels” (A3.5)', String(pr.saidNothingSafety), '']
-    ])], 'Wilson score intervals. A “safety parameter” is a code marked Safety in the codebook; the third row counts unprimed lists with at least one coded entry.'));
+      ['How safe a road felt made her choose a different road (A3.1, yes)', ci(pr.changedRoadSafety.yes), String(pr.changedRoadSafety.n)],
+      ['The unprimed list (A2.2) already names a safety parameter' + (pr.unprimedMentionsSafety.fullyCoded ? '' : ' (provisional: unprimed list not fully coded)'), ci(pr.unprimedMentionsSafety.ci), String(pr.unprimedMentionsSafety.n)],
+      ['Ticked “Nothing about a road changes my choice” (A2.2)', String(pr.saidNothingUnprimed), ''],
+      ['Ticked “Nothing about a road changes how safe it feels” (A3.4)', String(pr.saidNothingSafety), '']
+    ])], 'Wilson score intervals. A2.1 and A3.1 ask the same question, with any reason and with safety as the reason. A “safety parameter” is a code marked Safety in the codebook; the third row counts unprimed lists with at least one coded entry.'));
 
     var un = A.salience.unprimed;
-    main.appendChild(panel('Salience in the unprimed list (A2.4)', [salienceTable(un.codedRows, null, false)], un.N + ' non-empty lists. For comparison only; Form B items come from A3.5.'));
+    main.appendChild(panel('Salience in the unprimed list (A2.2)', [salienceTable(un.codedRows, null, false)], un.N + ' non-empty lists. For comparison only; Form B items come from A3.4.'));
     main.appendChild(h('div', { class: 'grid2 stack' }, [
-      panel('What women did (A2.3, any reason)', [tallyTable(A.behaviour.actionsAny, 'actions', true)]),
-      panel('What women did (A3.3, safety)', [tallyTable(A.behaviour.actionsSafety, 'actions', true), h('h3', { text: 'Time of that occasion (A3.4)' }), tallyTable(A.behaviour.timeSafety, 'timeOfDay')])
+      panel('Time of the most recent safety change (A3.3)', [tallyTable(A.timeSafety, 'timeOfDay')], 'Asked only after a yes to A3.1.'),
+      panel('Most recent time, in her words (A3.2)', [details('Read the ' + A.texts.storySafety.length + ' answers', [textList(A.texts.storySafety)])],
+        'Read these against the codebook: a road feature that appears here but in no list is a missing parameter to report. Short quotations can illustrate the parameters, without anything that identifies the woman.')
     ]));
     main.appendChild(panel('Sample profile (A4)', profile(A.sample)));
-    main.appendChild(panel('Open answers', [
-      details('A2.2 Most recent time, any reason (' + A.texts.storyAny.length + ')', [textList(A.texts.storyAny)]),
-      details('A3.2 Most recent time, safety (' + A.texts.storySafety.length + ')', [textList(A.texts.storySafety)]),
-      details('A3.6 Differences after dark (' + A.texts.afterDark.length + ')', [textList(A.texts.afterDark)]),
-      details('A3.7 Anything else (' + A.texts.anythingElse.length + ')', [textList(A.texts.anythingElse)]),
-      details('“Something else” actions (' + A.texts.otherActions.length + ')', [textList(A.texts.otherActions)])
-    ], 'Read A3.2, A3.6 and A3.7 against the codebook: a road feature that appears here but in no list is a missing parameter to report.'));
   }
   function profile(sample) {
     return [h('div', { class: 'grid2' }, [
-      h('div', {}, [h('h3', { text: 'Age' }), tallyTable(sample.age, 'age'), h('h3', { text: 'How often' }), tallyTable(sample.frequency, 'frequency'), h('h3', { text: 'Alone or with others' }), tallyTable(sample.company, 'company')]),
+      h('div', {}, [h('h3', { text: 'Age' }), tallyTable(sample.age, 'age'), h('h3', { text: 'Alone or with others' }), tallyTable(sample.company, 'company')]),
       h('div', {}, [h('h3', { text: 'How they travel' }), tallyTable(sample.modes, 'modes', true), h('h3', { text: 'Area' }), tallyTable(sample.area, 'area')])
     ])];
   }
@@ -311,8 +307,8 @@
     var A = res.formA, cov = A.coding.coverage, alpha = A.coding.alpha;
     main.appendChild(titleRow('Coding', cov.safety.coded + ' of ' + cov.safety.entries + ' distinct safety-list entries coded. Every one must be coded before freezing.'));
     main.appendChild(kpis([
-      ['Safety list (A3.5) coded', String(cov.safety.coded), 'of ' + cov.safety.entries + ' distinct entries'],
-      ['Unprimed list (A2.4) coded', String(cov.unprimed.coded), 'of ' + cov.unprimed.entries + '; needed for the hypothesis check'],
+      ['Safety list (A3.4) coded', String(cov.safety.coded), 'of ' + cov.safety.entries + ' distinct entries'],
+      ['Unprimed list (A2.2) coded', String(cov.unprimed.coded), 'of ' + cov.unprimed.entries + '; needed for the hypothesis check'],
       ['Entries split into several codes', String(cov.split), 'e.g. “dark and empty”'],
       ["Krippendorff's α", alpha.alpha === null ? '–' : num(alpha.alpha, 3), alpha.units + ' entries coded by both coders; ≥ 0.80 reliable, 0.667–0.80 tentative']
     ]));
@@ -351,7 +347,7 @@
     var filter = h('select', { class: 'inline', 'aria-label': 'Filter' }, [h('option', { value: 'uncoded', text: 'Not coded yet' }), h('option', { value: 'all', text: 'All entries' })]);
     filter.value = S.filter;
     filter.addEventListener('change', function () { S.filter = filter.value; render(); });
-    var list = h('select', { class: 'inline', 'aria-label': 'List' }, [h('option', { value: 'all', text: 'Both lists' }), h('option', { value: 'safety', text: 'Safety list (A3.5)' }), h('option', { value: 'unprimed', text: 'Unprimed list (A2.4)' })]);
+    var list = h('select', { class: 'inline', 'aria-label': 'List' }, [h('option', { value: 'all', text: 'Both lists' }), h('option', { value: 'safety', text: 'Safety list (A3.4)' }), h('option', { value: 'unprimed', text: 'Unprimed list (A2.2)' })]);
     list.value = S.list;
     list.addEventListener('change', function () { S.list = list.value; render(); });
     var search = h('input', { type: 'text', class: 'inline grow', placeholder: 'Search entries', value: S.search, 'aria-label': 'Search entries' });
@@ -509,7 +505,7 @@
         if (!window.confirm('Freeze these ' + k + ' parameters and open Form B? The wording respondents see cannot be changed without starting a new version.')) return;
         act({ action: 'freeze', k: k }, 'Form B is open.').then(function () { load(); }).catch(function () {});
       } })])
-    ], 'Rule: the top K parameters by Smith’s salience on the safety list (A3.5), leaving out codes marked “not safety” and codes listed by only one respondent. K = 12 gives 12 sets of 4 in which every item appears 4 times. Edit wording in the Coding tab. The rule under row ' + k + ' is the cut-off.'));
+    ], 'Rule: the top K parameters by Smith’s salience on the safety list (A3.4), leaving out codes marked “not safety” and codes listed by only one respondent. K = 12 gives 12 sets of 4 in which every item appears 4 times. Edit wording in the Coding tab. The rule under row ' + k + ' is the cut-off.'));
   }
 
   // ---------------------------------------------------------------- quality
@@ -520,20 +516,20 @@
     main.appendChild(titleRow('Quality', finding, !(fb.open && fb.n)));
     main.appendChild(panel('Form A', [table(['Check', { text: 'Result', num: true }], [
       ['Test responses (' + testWord() + ')', String(A.nTest)],
+      ['Repeat responses from the same email (left out; her first response is kept)', String(A.nRepeat)],
       ['Relative speed index above 2, about twice the median pace (Leiner 2019)', String(A.speedFlagged)]
-    ])], 'Speed index: per page, the sample median time ÷ the respondent’s time, each capped at 3, then averaged over the pages she saw. Reported only; Form A answers are free lists, so speed is not used to drop anyone.'));
+    ])], 'A woman’s first response is the one given before she had seen the safety questions, so a later one cannot count as unprimed. Speed index: per page, the sample median time ÷ the respondent’s time, each capped at 3, then averaged over the pages she saw. Reported only; Form A answers are free lists, so speed is not used to drop anyone.'));
     if (fb.open) {
       main.appendChild(panel('Form B', [table(['Check', { text: 'Result', num: true }], [
         ['Test responses (' + testWord() + ')', String(fb.nTest)],
         ['Responses from earlier design versions (left out)', String(fb.nOtherVersions)],
+        ['Repeat responses from the same email (left out; her first response is kept)', String(fb.nRepeat)],
+        ['Same email as a Form A respondent (left out: Form B needs different women)', String(fb.nFormA)],
         ['Respondents who skipped every set', String(fb.n - fb.nAnswered)],
         ['Sets skipped', String(fb.nSkippedSets)],
         ['Flagged: relative speed index above 2 (Leiner 2019)', String(s.byFlag.speed)],
-        ['Flagged: said they took part before (B4.6 = yes)', String(s.byFlag.tookPartBefore)],
-        ['Flagged: this device had submitted Form A', String(s.byFlag.deviceFormA)],
-        ['Flagged: this device had already submitted Form B', String(s.byFlag.repeatDevice)],
         ['Ranking without flagged respondents', s.nExcluded === 0 ? 'No one flagged' : s.spearman !== undefined ? 'Spearman ρ = ' + num(s.spearman, 3) + ' (' + s.nKept + ' kept)' : 'Not estimable (' + (s.status || 'model not estimated') + ')']
-      ])], 'A respondent can carry several flags. The comparison shows whether leaving flagged respondents out would change the order.'));
+      ])], 'Earlier participation is found by matching emails, so it no longer depends on what a respondent remembers or on which phone she used. Flagged respondents stay in the main ranking; the last line shows whether leaving them out would change the order.'));
       var pt = fb.positionTest, totalB = fb.positions.reduce(function (m, p) { return m + p.best; }, 0);
       main.appendChild(panel('Choices by screen position', [table(['Position in the set', { text: 'Chosen most', num: true }, { text: 'Chosen least', num: true }, { text: 'Expected if position has no effect', num: true }],
         fb.positions.map(function (p) { return ['Row ' + p.position, String(p.best), String(p.worst), num(totalB / 4, 1)]; }).concat([
@@ -546,6 +542,88 @@
       fb.open ? details('B5.1 Unclear items in Form B (' + fb.texts.unclearItems.length + ')', [textList(fb.texts.unclearItems)]) : null,
       fb.open ? details('B5.2 Missing items (' + fb.texts.missingItems.length + ')', [textList(fb.texts.missingItems)]) : null
     ], 'Respondent debriefing questions replace a separate pre-test (Presser et al. 2004). Read them before freezing and before reporting.'));
+  }
+
+  // ---------------------------------------------------------------- respondents
+  var STATUS = {
+    kept: 'In the analysis',
+    test: 'Test, left out',
+    repeat: 'Repeat of an earlier response from this email, left out',
+    formA: 'Also answered Form A, left out (Form B needs different women)',
+    otherVersion: 'Earlier Form B version, left out',
+    closed: 'Form B is closed, so not in a ranking'
+  };
+  function statusText(r) {
+    var t = r.status === 'kept' && r.test ? 'Test, included for checking' : STATUS[r.status] || r.status;
+    return t + (r.flags && r.flags.indexOf('speed') >= 0 ? '; flagged: fast (speed index above 2)' : '');
+  }
+  /** Field id -> "code wording" for one form, from the questions file (both forms share field ids, not codes). */
+  function fieldNames(form) {
+    var names = {};
+    (form === 'A' ? QS.formA.pages : [QS.formB.consent, QS.formB.eligibility, QS.formB.travel, QS.formB.debrief]).forEach(function (p) {
+      p.questions.forEach(function (q) {
+        if (!q.id) return;
+        names[q.id] = (q.code ? q.code + ' ' : '') + q.prompt.replace(/\*\*/g, '');
+        if (q.nothingId) names[q.nothingId] = (q.code ? q.code + ' ' : '') + q.nothingLabel;
+        (q.options || []).forEach(function (o) { if (o.other) names[o.other] = (q.code ? q.code + ' ' : '') + o.label + ': described'; });
+      });
+    });
+    return names;
+  }
+  function labelOf(field, v) {
+    var group = { gender: 'gender', age: 'age', roads: 'roads', modes: 'modes', company: 'company', area: 'area', changedAny: 'yesNoUnsure', changedSafety: 'yesNoUnsure', timeSafety: 'timeOfDay' }[field];
+    var opts = group ? O[group] : null;
+    function one(x) { var o = opts && opts.filter(function (y) { return y.v === x; })[0]; return o ? o.label : String(x); }
+    if (Array.isArray(v)) return field === 'listAny' || field === 'listSafety' ? v.map(function (x, i) { return (i + 1) + '. ' + x; }).join('   ') : v.map(one).join('; ');
+    if (v === true) return 'Yes';
+    return one(v);
+  }
+  /** One person's answers, in question order; Form B adds her choice in each set. */
+  function answerLines(rec, versions) {
+    var names = fieldNames(rec.form), lines = [];
+    Object.keys(names).forEach(function (f) {
+      var v = rec.answers[f];
+      if (v === undefined || v === null || v === '' || v === false || (Array.isArray(v) && !v.length) || f === 'consent') return;
+      lines.push(names[f] + ': ' + labelOf(f, v));
+    });
+    if (rec.form === 'B') {
+      var items = versions[rec.designVersion] ? versions[rec.designVersion].items : null;
+      var lab = function (i) { return items && items[i] ? items[i].label : 'item ' + (i + 1); };
+      rec.bws.forEach(function (s) {
+        lines.push('Set ' + (s.order + 1) + ': ' + (s.best === null ? 'skipped' : 'most “' + lab(s.best) + '”, least “' + lab(s.worst) + '”'));
+      });
+    }
+    return lines;
+  }
+
+  function renderRespondents(main, res) {
+    var all = res.respondents || [];
+    var nA = all.filter(function (r) { return r.form === 'A'; }).length, nB = all.length - nA;
+    main.appendChild(titleRow('Respondents', nA + ' Form A and ' + nB + ' Form B responses stored, by email. Emails and names are confidential: they stay on this page and in respondents_by_email.csv, and never go into a report or a shared file.'));
+    var search = h('input', { type: 'text', class: 'inline grow', placeholder: 'Find an email or name', value: S.who, 'aria-label': 'Find an email or name' });
+    search.addEventListener('change', function () { S.who = search.value; render(); });
+    var q = S.who.trim().toLowerCase();
+    var shown = all.filter(function (r) { return !q || r.email.indexOf(q) >= 0 || r.name.toLowerCase().indexOf(q) >= 0; });
+    var loadBtn = h('button', { class: 'btn small secondary', type: 'button', text: S.raw ? 'Reload answers' : 'Show every answer', onclick: function () {
+      act({ action: 'exportData' }).then(function (d) {
+        var versions = {}, byId = {};
+        (d.config.history || []).forEach(function (v) { versions[v.designVersion] = v; });
+        d.formA.concat(d.formB).forEach(function (r) { byId[r.form + '|' + r.id] = r; });
+        S.raw = { byId: byId, versions: versions, at: new Date() };
+        render();
+      }).catch(function () {});
+    } });
+    var rows = shown.map(function (r) {
+      var rec = S.raw && S.raw.byId[r.form + '|' + r.id];
+      var answers = rec ? details('Answers', [h('ul', { class: 'textlist' }, answerLines(rec, S.raw.versions).map(function (t) { return h('li', { text: t }); }))])
+        : h('span', { class: 'muted small', text: S.raw ? 'Press Reload answers' : '–' });
+      return ['Form ' + r.form, new Date(r.receivedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }), r.email || '(none)', r.name || '–', statusText(r), answers];
+    });
+    main.appendChild(panel('Every response', [
+      h('div', { class: 'row', style: 'margin-bottom:12px' }, [search, loadBtn]),
+      S.raw ? h('p', { class: 'muted small', text: 'Answers as loaded at ' + S.raw.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' }) : null,
+      shown.length ? table(['Form', 'Received', 'Email', 'Name', 'In the analysis?', 'Answers'], rows) : h('p', { class: 'muted', text: all.length ? 'No response matches.' : 'No responses yet.' })
+    ], 'Oldest first. Each woman counts once in each form: a later response from the same email is kept in the Sheet but left out of the analysis. To delete someone’s answers on request, find her email here, then delete those rows in the Google Sheet (FormA and FormB tabs).'));
   }
 
   // ---------------------------------------------------------------- export
@@ -563,7 +641,8 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
   function duration(r) { var t = 0; Object.keys(r.pageTimes || {}).forEach(function (k) { t += r.pageTimes[k]; }); return Math.round(t / 1000); }
-  var TRAVEL = ['modes', 'modesOther', 'frequency', 'company', 'area', 'city'];
+  var TRAVEL = ['modes', 'modesOther', 'company', 'area', 'city'];
+  var IDENTITY = { email: true, name: true };
   function pad(arr, n) { var a = (arr || []).slice(0, n); while (a.length < n) a.push(''); return a; }
   function boxes(prefix) { return pad([], 10).map(function (_, i) { return prefix + '_' + (i + 1); }); }
 
@@ -574,7 +653,7 @@
       pages.forEach(function (p) {
         p.questions.forEach(function (q) {
           if (!q.id) return;
-          var vals = (q.options || []).map(function (o) { return o.v + ' = ' + o.label; }).join('; ');
+          var vals = IDENTITY[q.id] ? 'kept apart, in respondents_by_email.csv only' : (q.options || []).map(function (o) { return o.v + ' = ' + o.label; }).join('; ');
           rows.push([form, q.code || '', q.id, q.type, p.id, q.prompt.replace(/\*\*/g, ''), vals]);
           if (q.nothingId) rows.push([form, q.code || '', q.nothingId, 'checkbox', p.id, q.nothingLabel, 'true / false']);
           (q.options || []).forEach(function (o) { if (o.other) rows.push([form, q.code || '', o.other, 'text', p.id, o.label + ': description', '']); });
@@ -599,42 +678,52 @@
     var versions = {};
     (d.config.history || []).forEach(function (v) { versions[v.designVersion] = v; });
     var files = {};
-    var aHead = ['id', 'receivedAt', 'formVersion', 'test', 'sameDeviceRepeat', 'durationSec', 'age',
-      'changedAny', 'storyAny', 'actionsAny', 'actionsAnyOther'].concat(boxes('listAny'), ['listAnyNothing',
-      'changedSafety', 'storySafety', 'actionsSafety', 'actionsSafetyOther', 'timeSafety'], boxes('listSafety'), ['listSafetyNothing', 'afterDark', 'anythingElse'], TRAVEL, ['unclear']);
+    // the analysis status shown in the dashboard (kept, test, repeat, formA, otherVersion, closed), by record
+    var status = {};
+    (S.res.respondents || []).forEach(function (p) { status[p.form + '|' + p.id] = p; });
+    function st(r) { var p = status[r.form + '|' + r.id]; return p ? p.status : ''; }
+    // Pseudonymised files: answers are linked to a person only through respondentId, and the emails and
+    // names sit in one separate file, so every other file can be shared without identifying anyone.
+    files['respondents_by_email.csv'] = csv(['form', 'respondentId', 'email', 'name', 'receivedAt', 'test', 'designVersion', 'analysisStatus', 'flags'],
+      d.formA.concat(d.formB).map(function (r) {
+        var p = status[r.form + '|' + r.id];
+        return [r.form, r.id, r.email, r.name, r.receivedAt, r.test, r.designVersion, p ? p.status : '', p ? p.flags : ''];
+      }));
+    var aHead = ['respondentId', 'receivedAt', 'formVersion', 'test', 'analysisStatus', 'sameDeviceRepeat', 'durationSec', 'age',
+      'changedAny'].concat(boxes('listAny'), ['listAnyNothing', 'changedSafety', 'storySafety', 'timeSafety'], boxes('listSafety'), ['listSafetyNothing'], TRAVEL, ['unclear']);
     files['formA_respondents.csv'] = csv(aHead, d.formA.map(function (r) {
       var x = r.answers;
-      return [r.id, r.receivedAt, r.formVersion, r.test, r.sameDeviceRepeat, duration(r), x.age, x.changedAny, x.storyAny, x.actionsAny, x.actionsAnyOther]
-        .concat(pad(x.listAny, 10), [x.listAnyNothing, x.changedSafety, x.storySafety, x.actionsSafety, x.actionsSafetyOther, x.timeSafety], pad(x.listSafety, 10),
-          [x.listSafetyNothing, x.afterDark, x.anythingElse], TRAVEL.map(function (k) { return x[k]; }), [x.unclear]);
+      return [r.id, r.receivedAt, r.formVersion, r.test, st(r), r.sameDeviceRepeat, duration(r), x.age, x.changedAny]
+        .concat(pad(x.listAny, 10), [x.listAnyNothing, x.changedSafety, x.storySafety, x.timeSafety], pad(x.listSafety, 10),
+          [x.listSafetyNothing], TRAVEL.map(function (k) { return x[k]; }), [x.unclear]);
     }));
     var long = [];
     d.formA.forEach(function (r) {
-      [['A2.4', 'listAny'], ['A3.5', 'listSafety']].forEach(function (l) {
+      [['A2.2', 'listAny'], ['A3.4', 'listSafety']].forEach(function (l) {
         (r.answers[l[1]] || []).forEach(function (e, i) {
           var k = norm(e), c1 = assign[1][k] || null, c2 = assign[2][k] || null;
-          long.push([r.id, r.test, l[0], i + 1, e, k, ids(c1), labels(c1), ids(c2), labels(c2)]);
+          long.push([r.id, r.test, st(r), l[0], i + 1, e, k, ids(c1), labels(c1), ids(c2), labels(c2)]);
         });
       });
     });
-    files['formA_freelists_long.csv'] = csv(['respondentId', 'test', 'list', 'positionAsWritten', 'entry', 'normalisedKey', 'code1', 'code1Label', 'code2', 'code2Label'], long);
-    files['formB_respondents.csv'] = csv(['id', 'receivedAt', 'formVersion', 'test', 'designVersion', 'sameDeviceRepeat', 'sameDeviceFormA', 'durationSec', 'age'].concat(TRAVEL, ['tookPartBefore', 'unclearItems', 'missingItems', 'setsSkipped']),
+    files['formA_freelists_long.csv'] = csv(['respondentId', 'test', 'analysisStatus', 'list', 'positionAsWritten', 'entry', 'normalisedKey', 'code1', 'code1Label', 'code2', 'code2Label'], long);
+    files['formB_respondents.csv'] = csv(['respondentId', 'receivedAt', 'formVersion', 'test', 'designVersion', 'analysisStatus', 'sameDeviceRepeat', 'sameDeviceFormA', 'durationSec', 'age'].concat(TRAVEL, ['unclearItems', 'missingItems', 'setsSkipped']),
       d.formB.map(function (r) {
         var x = r.answers;
-        return [r.id, r.receivedAt, r.formVersion, r.test, r.designVersion, r.sameDeviceRepeat, r.sameDeviceFormA, duration(r), x.age].concat(TRAVEL.map(function (k) { return x[k]; }),
-          [x.tookPartBefore, x.unclearItems, x.missingItems, r.bws.filter(function (s) { return s.best === null; }).length]);
+        return [r.id, r.receivedAt, r.formVersion, r.test, r.designVersion, st(r), r.sameDeviceRepeat, r.sameDeviceFormA, duration(r), x.age].concat(TRAVEL.map(function (k) { return x[k]; }),
+          [x.unclearItems, x.missingItems, r.bws.filter(function (s) { return s.best === null; }).length]);
       }));
     var choices = [];
     d.formB.forEach(function (r) {
       var v = versions[r.designVersion];
       r.bws.forEach(function (s) {
         s.shown.forEach(function (item, pos) {
-          choices.push([r.id, r.test, r.designVersion, s.order + 1, s.set + 1, pos + 1, item + 1, v ? v.items[item].label : '',
+          choices.push([r.id, r.test, r.designVersion, st(r), s.order + 1, s.set + 1, pos + 1, item + 1, v ? v.items[item].label : '',
             s.best === null ? '' : (s.best === item ? 1 : 0), s.worst === null ? '' : (s.worst === item ? 1 : 0), s.best === null ? 1 : 0, s.ms]);
         });
       });
     });
-    files['formB_choices_long.csv'] = csv(['respondentId', 'test', 'designVersion', 'setOrder', 'designSet', 'position', 'item', 'itemLabel', 'best', 'worst', 'setSkipped', 'msOnSet'], choices);
+    files['formB_choices_long.csv'] = csv(['respondentId', 'test', 'designVersion', 'analysisStatus', 'setOrder', 'designSet', 'position', 'item', 'itemLabel', 'best', 'worst', 'setSkipped', 'msOnSet'], choices);
     var used = {};
     d.assignments.forEach(function (a) { if (a.coder === 1) (asList(a.code) === EXCLUDE ? [EXCLUDE] : asList(a.code)).forEach(function (c) { used[c] = (used[c] || 0) + 1; }); });
     files['codebook.csv'] = csv(['codeId', 'label', 'description', 'scope', 'entriesCodedByCoder1'], d.codes.map(function (c) { return [c.id, c.label, c.description, c.scope, used[c.id] || 0]; }));
@@ -645,7 +734,7 @@
       files['results_ranking.csv'] = csv(['rank', 'item', 'label', 'weight', 'weightLo95', 'weightHi95', 'utility', 'se', 'bwStd', 'best', 'worst', 'shown', 'rankLo95', 'rankHi95', 'pRankedFirst', 'rankSequentialModel', 'basis'],
         res.formB.ranking.map(function (r) { return [r.rank, r.item + 1, r.label, r.weight, r.weightLo, r.weightHi, r.utility, r.se, r.std, r.best, r.worst, r.shown, r.rankLo, r.rankHi, r.pTop, seqRanks ? seqRanks[r.item] : '', res.formB.rankingBasis]; }));
     }
-    files['results_salience_A35.csv'] = csv(['rank', 'codeId', 'label', 'scope', 'smithS', 'sutropCSI', 'freq', 'pct', 'meanPos'],
+    files['results_salience_A34.csv'] = csv(['rank', 'codeId', 'label', 'scope', 'smithS', 'sutropCSI', 'freq', 'pct', 'meanPos'],
       res.formA.salience.safety.codedRows.map(function (r, i) { return [i + 1, r.code, r.label, r.scope, r.smithS, r.sutropCSI, r.freq, r.pct, r.meanPos]; }));
     return files;
   }
@@ -658,7 +747,10 @@
       status.textContent = 'Preparing…';
       act({ action: 'exportData' }).then(function (d) {
         var files = buildExports(d);
-        files['results.json'] = JSON.stringify(S.res, null, 2);
+        // the results without the list of emails, so this file can be shared
+        var shareable = {};
+        Object.keys(S.res).forEach(function (k) { if (k !== 'respondents') shareable[k] = S.res[k]; });
+        files['results.json'] = JSON.stringify(shareable, null, 2);
         status.textContent = 'Ready. Each CSV is UTF-8 and opens in Excel, R, SPSS or Stata.';
         listEl.textContent = '';
         listEl.appendChild(table(['File', ''], Object.keys(files).map(function (name) {
@@ -667,7 +759,7 @@
       }).catch(function () { status.textContent = 'Export failed.'; });
     } });
     main.appendChild(panel('Files', [h('div', { class: 'row', style: 'margin-bottom:8px' }, [btn, status]), listEl],
-      'Test responses are included and marked in a “test” column. In the free-list file, a split entry lists its codes joined by “+”, in the order coded.'));
+      'Emails and names are only in respondents_by_email.csv. Every other file links answers to a person through respondentId alone, so it can be shared; never share respondents_by_email.csv. Test responses are included and marked in a “test” column, and analysisStatus says whether each response is in the analysis shown on this page (kept) or why not. In the free-list file, a split entry lists its codes joined by “+”, in the order coded.'));
   }
 
   // ---------------------------------------------------------------- start

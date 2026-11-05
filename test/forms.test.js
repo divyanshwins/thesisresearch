@@ -16,11 +16,12 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../docs/assets/questions.j
 const Q = ctx.window.QUESTIONS;
 
 const groupOf = {
-  consent: null, gender: 'gender', age: 'age', roads: 'yesNo', modes: 'modes', frequency: 'frequency', company: 'company', area: 'area',
-  changedAny: 'yesNoUnsure', actionsAny: 'actions', changedSafety: 'yesNoUnsure', actionsSafety: 'actions', timeSafety: 'timeOfDay', tookPartBefore: 'yesNoUnsure'
+  consent: null, gender: 'gender', age: 'age', roads: 'yesNo', modes: 'modes', company: 'company', area: 'area',
+  changedAny: 'yesNoUnsure', changedSafety: 'yesNoUnsure', timeSafety: 'timeOfDay'
 };
-const textFields = ['city', 'storyAny', 'storySafety', 'afterDark', 'anythingElse', 'unclear', 'unclearItems', 'missingItems'];
+const textFields = ['email', 'name', 'city', 'storySafety', 'unclear', 'unclearItems', 'missingItems'];
 const listFields = ['listAny', 'listSafety'];
+const identity = { email: 'someone@example.org' };
 
 // arrays created inside the vm sandbox have another prototype; compare plain copies
 const plain = (x) => JSON.parse(JSON.stringify(x));
@@ -44,9 +45,38 @@ test('every field the server stores is asked somewhere, and nothing else is aske
   const expected = Object.keys(groupOf).concat(textFields, listFields);
   for (const f of expected) assert.ok(asked.has(f), 'not asked: ' + f);
   for (const f of asked) assert.ok(expected.includes(f), 'asked but not stored: ' + f);
-  // and the server keeps each Form A field
-  const rec = E.validateA({ respondentId: '00000000-0000-4000-8000-000000000001', answers: { consent: 'yes', gender: 'woman', age: '18_24', roads: 'yes' } }, 0).record.answers;
-  for (const { q } of questionsOf(pagesA)) if (q.id) assert.ok(q.id in rec, 'Form A field not stored: ' + q.id);
+  // and the server keeps each Form A field: the email and name beside the answers, everything else in them
+  const rec = E.validateA({ respondentId: '00000000-0000-4000-8000-000000000001', answers: { consent: 'yes', gender: 'woman', age: '18_24', roads: 'yes', ...identity } }, 0).record;
+  for (const { q } of questionsOf(pagesA)) if (q.id) assert.ok(q.id in (q.id in identity || q.id === 'name' ? rec : rec.answers), 'Form A field not stored: ' + q.id);
+  assert.ok(!('email' in rec.answers) && !('name' in rec.answers), 'the email and name are kept out of the answers');
+});
+
+test('email: required on the same page as the screening questions, after them, and checked the same way in the form and on the server', () => {
+  for (const pages of [pagesA, pagesB]) {
+    const elig = pages.find((p) => p.id === 'elig');
+    const ids = elig.questions.map((q) => q.id);
+    assert.deepEqual(plain(ids), ['gender', 'age', 'roads', 'email', 'name'], 'screened-out women are never asked for an email');
+    const email = elig.questions.find((q) => q.id === 'email'), name = elig.questions.find((q) => q.id === 'name');
+    assert.equal(email.type, 'email'); assert.equal(email.required, true);
+    assert.ok(!name.required && name.optionalLabel, 'the name is optional');
+  }
+  const sctx = { window: {} };
+  vm.createContext(sctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../docs/assets/survey.js'), 'utf8'), sctx);
+  assert.equal(sctx.window.Survey.EMAIL_RE.source, E.EMAIL_RE.source, 'the form and the server use one email pattern');
+  for (const ok of ['a@b.co', 'first.last+tag@mail.example.ac.in', 'Name@Example.COM']) assert.ok(E.EMAIL_RE.test(ok), ok);
+  for (const bad of ['', 'a', 'a@b', 'a@b.', 'a@.com', 'a b@c.com', 'a@b..com', '@b.com', 'a@@b.com']) assert.ok(!E.EMAIL_RE.test(bad), bad);
+});
+
+test('the consent page names the email, who sees it, its deletion and how to withdraw', () => {
+  for (const page of [Q.formA.pages[0], Q.formB.consent]) {
+    assert.match(page.title, /consent/i);
+    const text = page.questions[0].paragraphs.join(' ').toLowerCase();
+    for (const must of ['voluntary', 'email address', 'name is optional', 'only the researcher', 'never shared', 'deleted', 'removed', 'group results']) {
+      assert.ok(text.includes(must), 'consent says "' + must + '"');
+    }
+    assert.ok(!/do not ask for your name/.test(text), 'no leftover promise of anonymity');
+  }
 });
 
 test('page ids are valid timing keys and unique', () => {
@@ -103,10 +133,19 @@ test('the travel profile (alone or with others) is asked after both blocks', () 
   assert.equal(pagesA[pagesA.length - 1].id, 'debrief');
 });
 
-test('follow-up actions only describe a change, matching the filter questions', () => {
-  const labels = plain(Q.options.actions.map((o) => o.label.toLowerCase()));
-  assert.ok(!labels.some((l) => /anyway/.test(l)), '"used the road anyway" contradicts "changed your choice"');
+test('the two episode questions ask the same thing, with any reason and with safety as the reason', () => {
+  const qs = questionsOf(pagesA).map(({ q }) => q);
+  const any = qs.find((q) => q.id === 'changedAny').prompt, safety = qs.find((q) => q.id === 'changedSafety').prompt;
+  for (const p of [any, safety]) assert.match(p, /In the last 12 months, was there a time when .* (chose|choose) a different road.* or decided? not to use a road/);
+  assert.match(safety, /safe or unsafe/, 'both directions (R4)');
   assert.deepEqual(plain(Q.options.timeOfDay.map((o) => o.v)), ['day', 'dawn_dusk', 'dark', 'dont_remember'], 'times in the order of the day');
+});
+
+test('no question asks what she did or what would fix the road: the study is about what changes the choice', () => {
+  const all = textOf(pagesA.concat(pagesB));
+  for (const w of ['what did you do', 'what would', 'improve', 'make it better', 'should be done', 'anything else']) assert.ok(!all.includes(w), 'asks "' + w + '"');
+  const ids = questionsOf(pagesA.concat(pagesB)).map(({ q }) => q.id);
+  for (const gone of ['actionsAny', 'actionsSafety', 'storyAny', 'afterDark', 'anythingElse', 'frequency', 'tookPartBefore']) assert.ok(!ids.includes(gone), gone + ' was removed');
 });
 
 test('Form B uses one identical criterion in every set, and its practice items are unrelated', () => {

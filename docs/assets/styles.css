@@ -102,7 +102,7 @@ strong { font-weight: 600; }
 .opt:has(input:disabled) { cursor: default; }
 .opt-nothing { margin-top: 12px; }
 .other-input { margin: 0 0 4px; }
-input[type="text"], input[type="password"], input[type="number"], textarea, select {
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea, select {
   width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--surface);
   border: 1px solid var(--control); border-radius: var(--radius-control); padding: 11px 12px; min-height: 44px;
 }

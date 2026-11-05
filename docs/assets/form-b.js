@@ -79,8 +79,8 @@
       if (!fb || !fb.open) { message('This survey is not open yet', 'Please check back later. Thank you for your interest.'); return; }
       var n = fb.sets.length;
       window.Survey.run({
-        formId: 'B', formVersion: 'B-2.0', title: Q.title, root: root, action: 'submitB', testMode: testMode,
-        draftKey: 'draft-B2-v' + fb.designVersion + (testMode ? '-test' : ''),
+        formId: 'B', formVersion: 'B-3.0', title: Q.title, root: root, action: 'submitB', testMode: testMode,
+        draftKey: 'draft-B3-v' + fb.designVersion + (testMode ? '-test' : ''),
         onReady: function (state) {
           if (!state.extra.setOrder || state.extra.setOrder.length !== n) {
             state.extra.setOrder = shuffle(fb.sets.map(function (_, i) { return i; }), state.respondentId + 'sets');

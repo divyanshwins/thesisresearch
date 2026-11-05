@@ -54,6 +54,8 @@
   // Five boxes are shown and a new one opens when the last is filled, up to ten.
   // The box count is a cue to how many answers are expected (Keusch 2014); it is the same for every respondent.
   var MIN_BOXES = 5, MAX_BOXES = 10;
+  // The same pattern as Engine.EMAIL_RE on the server (test/forms.test.js checks they match).
+  var EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
   /**
    * opts: { formId, root, title, pages, action, draftKey, testMode, debrief,
@@ -92,7 +94,7 @@
       var a = state.answers[q.id];
       if (q.type === 'single') return a === undefined || a === null;
       if (q.type === 'multi') return !a || !a.length;
-      if (q.type === 'text') return !a || !String(a).trim();
+      if (q.type === 'text' || q.type === 'email') return !a || !String(a).trim();
       if (q.type === 'freelist') return !state.answers[q.nothingId] && !(a || []).some(function (x) { return x && x.trim(); });
       if (q.type === 'custom') return !q.isAnswered(state);
       return false;
@@ -176,11 +178,15 @@
             optsWrap.appendChild(otherInput);
           }
         });
-      } else if (q.type === 'text') {
+      } else if (q.type === 'text' || q.type === 'email') {
         box = h('div', { class: 'q' });
-        var id = 'f-' + q.id;
+        var id = 'f-' + q.id, isEmail = q.type === 'email';
         box.appendChild(h('label', { class: 'prompt', for: id }, rich(q.prompt).concat([q.optionalLabel ? h('span', { class: 'tag', text: ' Optional' }) : null])));
-        var field = q.long ? h('textarea', { id: id, maxlength: 2000, rows: 4 }) : h('input', { type: 'text', id: id, maxlength: 200 });
+        if (q.help) box.appendChild(h('div', { class: 'help', id: 'help-' + q.id, text: q.help }));
+        var described = (q.help ? 'help-' + q.id + ' ' : '') + errId;
+        var field = q.long ? h('textarea', { id: id, maxlength: 2000, rows: 4, 'aria-describedby': described })
+          : isEmail ? h('input', { type: 'email', id: id, maxlength: 254, autocomplete: 'email', inputmode: 'email', autocapitalize: 'off', spellcheck: 'false', 'aria-describedby': described })
+          : h('input', { type: 'text', id: id, maxlength: 200, autocomplete: q.autocomplete || null, 'aria-describedby': described });
         field.value = state.answers[q.id] || '';
         field.addEventListener('input', function () { state.answers[q.id] = field.value; save(); });
         box.appendChild(field);
@@ -299,7 +305,10 @@
           var err = q.validate(state);
           if (err) { showNotice(box, 'error', err); blocked = true; continue; }
         }
-        if (q.required && isEmpty(q)) { showNotice(box, 'error', 'Please answer this question to continue.'); blocked = true; continue; }
+        if (q.required && isEmpty(q)) { showNotice(box, 'error', q.requiredText || 'Please answer this question to continue.'); blocked = true; continue; }
+        if (q.type === 'email' && !isEmpty(q) && !EMAIL_RE.test(String(state.answers[q.id]).trim())) {
+          showNotice(box, 'error', 'Please check your email address. It should look like name@example.com.'); blocked = true; continue;
+        }
         // one gentle reminder per page for an empty question (a soft prompt, not a forced answer)
         if (!q.required && !q.quiet && q.type !== 'custom' && isEmpty(q) && softShownFor !== state.pageIndex) {
           showNotice(box, 'soft', 'You have not answered this question. You can answer it now, or press Next again to continue.');
@@ -369,5 +378,5 @@
     return { state: state };
   }
 
-  window.Survey = { run: run, h: h, rich: rich, seededShuffle: seededShuffle };
+  window.Survey = { run: run, h: h, rich: rich, seededShuffle: seededShuffle, EMAIL_RE: EMAIL_RE };
 })();

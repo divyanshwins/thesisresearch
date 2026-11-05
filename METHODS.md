@@ -19,8 +19,8 @@ This file is the academic justification for every number the analytics page show
 The study has two stages, with different women in each.
 
 - **Stage 1 (Form A).** Women say, in their own words, what about a road changes their choice to use it.
-  - First the question is asked without mentioning safety (Block 1, A2.4). Then it is asked about safety (Block 2, A3.5).
-  - Each list is preceded by a critical-incident question about the most recent occasion.
+  - First the question is asked without mentioning safety (Block 1, A2.2). Then it is asked about safety (Block 2, A3.4).
+  - Each list is preceded by the same episode question ("in the last 12 months, was there a time when … you chose a different road"), first for any reason (A2.1), then with safety as the reason (A3.1). After a yes to A3.1, she can describe that most recent occasion (a critical incident).
   - The answers are coded into parameters, and the parameters are ranked by cognitive salience.
 - **Stage 2 (Form B).** A separate sample of women sees the most salient parameters in best-worst sets. A choice model turns their choices into ranked importance weights, with 95% intervals.
 
@@ -33,35 +33,62 @@ The parameters come from the target population, not from an expert panel. That i
 ### Question design
 | Rule | Where | Source |
 |---|---|---|
-| Ask about a specific recent episode, not a general opinion | A2.1–A2.3, A3.1–A3.4 | Flanagan (1954) ◻ |
-| Free listing in the respondent's own words, in the order the items come to mind | A2.4, A3.5 | Weller & Romney (1988) ◻ |
+| Ask about a specific recent episode, not a general opinion | A2.1, A3.1–A3.3 | Flanagan (1954) ◻ |
+| Free listing in the respondent's own words, in the order the items come to mind | A2.2, A3.4 | Weller & Romney (1988) ◻ |
 | **General before specific (funnel).** Block 1 never mentions safety, and the consent page does not either. Block 2 opens by saying it is about safety. Back is locked from Block 2 to Block 1, and the last Block 1 page says so before the respondent leaves it. | A2 → A3 | Dillman, Smyth & Christian (2014) ◻; Tourangeau, Rips & Rasinski (2000) ◻ |
 | **Profile questions go last.** "Alone or with other people" would cue safety before the unprimed list, and demographic questions belong at the end in any case. Eligibility screening stays first. | A4 | Dillman et al. (2014) ◻; context effects in Tourangeau et al. (2000) ◻ |
-| **No presupposition.** A filter question comes before every follow-up, and each list has a "Nothing…" option. | A2.1, A3.1, A2.4, A3.5 | Schaeffer & Presser (2003) ◻ |
-| **Follow-ups match their filter.** The filter asks whether the woman *changed* a trip, so every "What did you do?" option is a change. The old option "I used the road anyway" contradicted a yes and was removed. | A2.3, A3.3 | logical consistency |
-| **Ordered options in their natural order.** Daytime, dawn or dusk, after dark, then "I don't remember". | A3.4 | Tourangeau, Couper & Conrad (2004) ◐ |
-| Both directions in the wording ("more safe or less safe"; "safe or unsafe") | A3.1, A3.5 | Krosnick & Presser (2010) ◻ |
-| **No forced answers.** Only consent and eligibility are required. An empty question gets one gentle reminder (a soft prompt). Forcing answers raises drop-out and lowers answer quality. | all | Décieux et al. (2015) ◐ |
-| **Answer boxes.** Five boxes are shown, and a new one opens when the last is filled, up to ten. The number of boxes cues how many answers are expected, so it is the same for everyone. Smith's S is normalised by list length. | A2.4, A3.5 | Keusch (2014) ◐ |
+| **No presupposition.** A filter question comes before every follow-up, and each list has a "Nothing…" option. | A3.1 → A3.2–A3.3; A2.2, A3.4 | Schaeffer & Presser (2003) ◻ |
+| **One question, two reasons.** A2.1 and A3.1 ask the same thing (did she choose a different road, or not use a road), first for any reason other than time or distance, then because of how safe the road felt. The two shares can therefore be compared directly, and a yes to A3.1 is a special case of a yes to A2.1. | A2.1, A3.1 | parallel wording; Schuman & Presser (1981) ◻ |
+| **Ordered options in their natural order.** Daytime, dawn or dusk, after dark, then "I don't remember". | A3.3 | Tourangeau, Couper & Conrad (2004) ◐ |
+| Both directions in the wording ("more safe or less safe"; "safe or unsafe") | A3.1, A3.4 | Krosnick & Presser (2010) ◻ |
+| **No forced answers.** Only consent, eligibility and the email address are required. An empty question gets one gentle reminder (a soft prompt). Forcing answers raises drop-out and lowers answer quality. | all | Décieux et al. (2015) ◐ |
+| **Answer boxes.** Five boxes are shown, and a new one opens when the last is filled, up to ten. The number of boxes cues how many answers are expected, so it is the same for everyone. Smith's S is normalised by list length. | A2.2, A3.4 | Keusch (2014) ◐ |
 | Respondent debriefing ("was any question unclear?") replaces a separate pre-test | A5.1, B5.1, B5.2 | Presser et al. (2004) ◻ |
+
+### What was cut, and why (version 3)
+The rule: a question stays only if a stated result of the study depends on it. Each question below fed nothing but a descriptive table, or repeated another question.
+
+| Removed | Why |
+|---|---|
+| "What did you do?" (asked twice, A2.3 and A3.3 in version 2) | It recorded the *response* to a road (another road, another mode, going with someone), not the *road features that caused it*. The research question is which features change the choice; the response is a different construct (coping strategy) that no later step used. The episode question already records that the choice changed. |
+| The Block 1 story (A2.2 in version 2) | It asked the same thing as the Block 2 story, which is kept: the study's focus is the safety episode, and the unprimed block needs only its list. |
+| "Matters differently after dark" (A3.6) | Form B has one criterion and no day/night split, so these answers could not change any result. Time of day is kept as one tap (A3.3), and lighting comes up in the lists in any case. |
+| "Anything else about a road…" (A3.7) | It repeated the free list it followed, which already asks for everything about a road, with up to ten boxes. |
+| "How often do you travel?" (A4.2) | Screening already requires road use in the last 12 months, and no analysis is split by frequency. |
+| "Did you take part before?" (B4.6) | Replaced by matching email addresses with Form A, which does not rely on memory. |
+
+The two episode questions and the two lists look alike on purpose: asking the same question without and then with safety is the comparison the unprimed check rests on.
 
 ### Consent and incomplete disclosure (ethics committee decision)
 - **What the consent says.** The Form A consent describes the study as "how women choose which roads to use in everyday travel". It does not use the word safety. If it did, Block 1 would no longer be unprimed, and the unprimed hypothesis check would be invalid.
 - **When safety is disclosed.** Safety is named at the start of Block 2, together with a reminder that any question can be skipped. After submitting, the respondent sees a debrief explaining the order.
 - **Ethics approval.** This is incomplete disclosure. It needs the explicit approval of the institute ethics committee; the ICMR (2017) national guidelines have provisions for it ◐. If the committee requires the topic to be named up front, put the safety sentence back in the consent. Then report the unprimed check as primed, or drop it.
-- **What else the consent page states.**
+- **What else the consent page states** (titled "Information and consent" in both forms).
   - Participation is voluntary, and the respondent can stop at any time.
-  - Nothing is sent until she presses Submit.
-  - No names or contact details are collected.
-  - Answers are kept on the device until submission.
+  - Apart from the email and the three screening questions, every question can be skipped.
+  - Why the email is asked, who sees it, that it is never shared or reported and is deleted when the study ends, and how to have her answers removed.
+  - Answers are reported as group results; short quotations may be used without anything that identifies her.
+  - Nothing is sent until she presses Submit, and answers are kept on the device until then.
 - **Researcher details.** The researcher, a contact and the ethics approval reference come from `config.js`. Test mode warns while any of them is empty.
+
+### Email address: one response per person, and two separate samples
+- **What is asked.** An email address (required) and a name (optional), on the "About you" page, after the three screening questions, so that a woman who is screened out is never asked for them.
+- **What it is for.**
+  - **One response per person.** A later response from the same email is kept in the Sheet but left out of the analysis, and her first response is used. In Form A this is the one given before she had seen the safety block, so it is the only one whose first list is unprimed.
+  - **Two separate samples.** Form B is meant for women who did not answer Form A, because Form A respondents have already listed and thought about these features. A Form B response whose email matches a real Form A response is left out of the ranking and counted. Before, this rested on a self-report question and a device mark, which can only flag it.
+  - **Withdrawal.** A woman can ask for her answers to be deleted, which is impossible with anonymous data.
+- **Matching rule.** Emails are trimmed and compared in lower case. Tests are matched only with tests, and a Form B test is checked only against real Form A responses, so a trial run never removes a real response.
+- **The device marks** (this browser had submitted a form before) are still stored but no longer used, because a phone is often shared and the email tells people apart.
+- **Confidential, not anonymous.** The email and name are stored beside the answers, not in them. In the exports they are only in `respondents_by_email.csv`; every other file links answers to a person through a random respondent ID alone (pseudonymised), so it can be shared. Only the researcher key opens them. The emails must be deleted when the study ends, as the consent says.
+- **Cost to state.** Identified responses can lower reporting on sensitive topics compared with anonymous ones (Tourangeau & Yan 2007 ◻). The forms ask about road features, not about incidents, which limits this. Report it as a limitation.
+- **Format check.** The same pattern is used in the form and on the server (something@domain.tld, no spaces, at most 254 characters, the longest deliverable address under RFC 5321 ◻). A typo in an otherwise valid address cannot be caught.
 
 ### Visual design of the forms
 | Decision | Reason | Source |
 |---|---|---|
 | **No pictures.** Images in web surveys shift answers towards what they show, and a photo of a road would prime its features. | Avoid a visual context effect | Couper, Tourangeau & Kenyon (2004) ◐ |
 | **No colour in the answer area.** Options and buttons use ink and grey only. "Most" and "Least" look the same when chosen and are told apart by their column and label. | Colour and shading change how answer options are read | Tourangeau, Couper & Conrad (2007) ◐ |
-| **Options stacked vertically, equally spaced and equally sized.** Option order is randomised where there is no natural order (A2.3, A3.3), with "Something else" fixed last. | The position and spacing of options are read as meaning | Tourangeau, Couper & Conrad (2004) ◐ |
+| **Options stacked vertically, equally spaced and equally sized,** in their natural order where they have one, with "Something else" and "I'm not sure" last. In Form B, set order and item order are randomised. | The position and spacing of options are read as meaning | Tourangeau, Couper & Conrad (2004) ◐ |
 | **Built for phones first.** One column, 16px or larger text (so iOS does not zoom), touch targets 44px or more, the primary button full width at the thumb, one topic per page | Readability, ease of selection, visibility | Antoun, Katz, Argueta & Wang (2018) ◐; WCAG 2.2 target size |
 | **A thin progress line, with no percentage.** Progress indicators do not reliably reduce drop-out, so it is kept unobtrusive. | Avoid implying a pace | Villar, Callegaro & Yang (2013) ◐ |
 | **Contrast.** All text is at least 4.5:1 against its background, in light and in dark mode. | Accessibility | WCAG 2.1 AA |
@@ -107,12 +134,12 @@ CSI = F / (N × mP), where F is the frequency and mP the mean position. Sutrop (
 Shares such as "changed a trip because of safety" are reported with Wilson score intervals (Wilson 1927). Brown, Cai & DasGupta (2001) recommend these over the Wald interval.
 
 ### Hypothesis checks reported
-1. **A2.1.** The share who chose a different road for a reason other than time or distance.
-2. **A3.1.** The share for whom how safe a road felt changed a trip.
-3. **The unprimed list (A2.4).** The share of lists that already name a safety parameter before safety was mentioned. This is valid only because nothing before Block 2 mentions safety; a test checks this automatically. It is marked provisional until the unprimed list is fully coded.
+1. **A2.1.** The share who chose a different road, or did not use a road, for a reason other than time or distance.
+2. **A3.1.** The share who did so because of how safe the road felt.
+3. **The unprimed list (A2.2).** The share of lists that already name a safety parameter before safety was mentioned. This is valid only because nothing before Block 2 mentions safety; a test checks this automatically. It is marked provisional until the unprimed list is fully coded.
 
 ### From Stage 1 to Stage 2: the freeze rule
-- **Rule.** The **top K parameters by Smith's S** on the safety list (A3.5) become the Form B items, with three exclusions:
+- **Rule.** The **top K parameters by Smith's S** on the safety list (A3.4) become the Form B items, with three exclusions:
   - codes the researcher marked "not safety";
   - codes listed by only one respondent, because single mentions are treated as idiosyncratic (Sutrop 2001 ◐);
   - ties broken by frequency, then mean position. A tie at the cut-off is flagged.
@@ -134,7 +161,7 @@ Shares such as "changed a trip because of safety" are reported with Wilson score
 ## Stage 2: Form B
 
 ### Question design
-- **Order.** Consent, eligibility, instructions with an unscored practice set, the K sets, then the travel profile and the "took part before" question (B4), then debriefing (B5). Profile questions come last, as in Form A.
+- **Order.** Consent, eligibility and email, instructions with an unscored practice set, the K sets, then the travel profile (B4), then debriefing (B5). Profile questions come last, as in Form A. Earlier participation is found by email (see above), not asked.
 - **One criterion.** Every set uses the identical question, with "most" and "least" in bold.
 - **Tie-break instruction.** "If two items feel equally important, choose either one." The earlier "the one that comes first to mind" could be read as "the first one on the screen", which would invite position effects.
 - **Practice items.** The practice set is about trip decisions (time, cost, comfort, ease of finding the route), so it cannot rehearse the study items.
@@ -190,12 +217,10 @@ Spearman's ρ (the Pearson correlation of ranks, with ties given their average r
   - the index is the mean over the pages she saw.
 
   Leiner's pragmatic cut-off of **2.0** flags particularly suspicious records. Leiner also warns that completion time is not a valid indicator for questions about facts rather than opinions. For Form A it is therefore reported but never used to drop anyone.
-- **Other Form B flags.**
-  - The respondent says she took part before (B4.6).
-  - The device had already submitted Form A.
-  - The device had already submitted Form B.
-- **Sensitivity analysis.** Flagged respondents **stay in** the main ranking. The model is re-run without them and the agreement is reported.
-- **Test responses.** Responses sent with `?test=1` are stored but never analysed. A test run records its own device mark, so a demonstration on someone's phone never flags her later real response as a repeat. The analytics page can include test responses on request, to check that the forms reach the analysis; it then says so in a banner, and the freeze always runs on real responses only.
+- **Left out of the Form B ranking, and counted** (see the email section): a repeat from the same email, and a woman whose email is in Form A. These are rules of the design, not sensitivity checks.
+- **Sensitivity analysis.** Respondents flagged for speed **stay in** the main ranking. The model is re-run without them and the agreement is reported.
+- **Test responses.** Responses sent with `?test=1` are stored but never analysed. The analytics page can include test responses on request, to check that the forms reach the analysis; it then says so in a banner, and the freeze always runs on real responses only.
+- **Respondents tab.** Every stored response is listed by email with the reason it is in or out of the analysis, and its answers can be opened. This is where a withdrawal request is found.
 
 ### M14. Position check ◻ (test) / ✔ (calibrated here)
 - **What is counted.** Choices of most and least by screen position. With randomised order, each position should be chosen about equally often.
@@ -211,7 +236,7 @@ Sample quantiles use Hyndman & Fan (1996) type 7 (the default in R and NumPy), a
 ## What the simulations show (simulated data, not results)
 
 **End to end** (`npm run simulate`). 40 synthetic Form A and 60 synthetic Form B respondents with known "true" utilities go through the real backend, including coding (with split entries), the freeze and the live ranking.
-- The live ranking recovered the true order with Spearman ρ = 0.97.
+- The live ranking recovered the true order with Spearman ρ = 0.99 (0.993 in the run of 5 November 2026; the value depends on the random draws).
 - The only swaps were between neighbouring items whose 95% intervals overlapped.
 
 **Sample size** (`npm run power`). This follows the simulation approach to sample size for choice experiments (de Bekker-Grob, Donkers, Jonker & Stolk 2015 ◻). There were 200 simulated samples per size, with 12 items and assumed utilities spread over about 2 logits.
@@ -242,10 +267,15 @@ Sample quantiles use Hyndman & Fan (1996) type 7 (the default in R and NumPy), a
 | Does the model drive the result? | The order is reported with a model-free count score and a second model (sequential best-worst); their agreement is shown. |
 | Are the weights exact? | No. The order with 95% intervals is the result; the weights are a model-based scale of that order. |
 | Did respondents choose by position? | Item order is randomised, and choices by position are reported with a calibrated test. |
+| Why collect email addresses? | To count each woman once, to keep the Form B sample separate from Form A, and to allow withdrawal. They are kept apart from the answers and never reported. The cost (confidential rather than anonymous answers) is stated as a limitation. |
+| Were the Form B women really different from the Form A women? | Every Form B response whose email matches a Form A response is left out of the ranking, and the number is reported. Someone using a different address would not be caught. |
+| Why so few questions? | Each question that remains feeds a reported result. Those that only described coping actions, or repeated another question, were removed (see "What was cut, and why"). |
 
 ## Limitations to state
 - There were no cognitive interviews; debriefing questions are a weaker check of wording.
 - The design relies on incomplete disclosure (safety named only in Block 2), which needs ethics approval.
+- Answers are confidential, not anonymous, because an email is required. This can lower reporting on sensitive topics (Tourangeau & Yan 2007), and some women may decline to take part for this reason.
+- The email match finds repeats and Form A respondents only when the same address is used.
 - One coder, unless a second is used.
 - Free-list salience depends on how respondents phrase things, and on the coder's grouping.
 - The sample is self-selected, online and in English only. A translated version would need forward and back translation.
@@ -286,12 +316,15 @@ Sample quantiles use Hyndman & Fan (1996) type 7 (the default in R and NumPy), a
 - Quinlan, M. (2005). Considerations for collecting freelists in the field: Examples from ethnobotany. *Field Methods*, 17(3), 219–234.
 - Satopää, V., Albrecht, J., Irwin, D., & Raghavan, B. (2011). Finding a "kneedle" in a haystack: Detecting knee points in system behavior. *31st International Conference on Distributed Computing Systems Workshops*, 166–171.
 - Sawtooth Software (n.d.). *Lighthouse Studio manual: Designing a MaxDiff study*. sawtoothsoftware.com/help/lighthouse-studio/manual/maxdiff-designing-study.html (retrieved 5 November 2026).
+- Klensin, J. (2008). *Simple Mail Transfer Protocol* (RFC 5321). Internet Engineering Task Force. (Path limit of 256 octets, so at most 254 characters for the address.)
 - Schaeffer, N. C., & Presser, S. (2003). The science of asking questions. *Annual Review of Sociology*, 29, 65–88.
+- Schuman, H., & Presser, S. (1981). *Questions and Answers in Attitude Surveys: Experiments on Question Form, Wording, and Context*. Academic Press.
 - Smith, J. J. (1993). Using ANTHOPAC 3.5 and a spreadsheet to compute a free-list salience index. *Cultural Anthropology Methods*, 5(3), 1–3.
 - Sutrop, U. (2001). List task and a cognitive salience index. *Field Methods*, 13(3), 263–276.
 - Tourangeau, R., Couper, M. P., & Conrad, F. (2004). Spacing, position, and order: Interpretive heuristics for visual features of survey questions. *Public Opinion Quarterly*, 68(3), 368–393.
 - Tourangeau, R., Couper, M. P., & Conrad, F. (2007). Color, labels, and interpretive heuristics for response scales. *Public Opinion Quarterly*, 71(1), 91–112.
 - Tourangeau, R., Rips, L. J., & Rasinski, K. (2000). *The Psychology of Survey Response*. Cambridge University Press.
+- Tourangeau, R., & Yan, T. (2007). Sensitive questions in surveys. *Psychological Bulletin*, 133(5), 859–883.
 - Villar, A., Callegaro, M., & Yang, Y. (2013). Where am I? A meta-analysis of experiments on the effects of progress indicators for web surveys. *Social Science Computer Review*, 31(6), 744–762.
 - Weller, S. C., & Romney, A. K. (1988). *Systematic Data Collection*. Sage.
 - White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct test for heteroskedasticity. *Econometrica*, 48(4), 817–838.

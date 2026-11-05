@@ -15,8 +15,8 @@
     window.API.get('config').then(function (cfg) {
       if (!cfg.formAOpen) { message('This survey is closed', 'Thank you for your interest.'); return; }
       window.Survey.run({
-        formId: 'A', formVersion: 'A-2.0', title: Q.title, root: root, pages: Q.pages, debrief: Q.debrief,
-        action: 'submitA', draftKey: 'draft-A2' + (testMode ? '-test' : ''), testMode: testMode
+        formId: 'A', formVersion: 'A-3.0', title: Q.title, root: root, pages: Q.pages, debrief: Q.debrief,
+        action: 'submitA', draftKey: 'draft-A3' + (testMode ? '-test' : ''), testMode: testMode
       });
     }).catch(function (err) { message('The survey could not load', err.message, true); });
   }

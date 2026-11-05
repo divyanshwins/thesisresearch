@@ -216,37 +216,41 @@ test('quantile type 7 (Hyndman & Fan) gives the R / NumPy default values', () =>
   close(E.quantile([4, 1, 3, 2], 0.975), 3.925, 1e-12);
 });
 
-const baseAnswers = { consent: 'yes', gender: 'woman', age: '18_24', roads: 'yes', modes: ['foot', 'bus'], frequency: 'daily', company: 'alone', area: 'campus' };
+const baseAnswers = { consent: 'yes', gender: 'woman', age: '18_24', roads: 'yes', email: 'r@example.org', modes: ['foot', 'bus'], company: 'alone', area: 'campus' };
 const uuid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
 
-test('validation of Form A: eligibility, branching and limits are enforced on the server', () => {
+test('validation of Form A: eligibility, email, branching and limits are enforced on the server', () => {
   assert.equal(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, gender: 'man' } }, 0).ok, false);
   assert.equal(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, age: 'under18' } }, 0).ok, false);
   assert.equal(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, consent: 'no' } }, 0).ok, false);
   assert.equal(E.validateA({ respondentId: 'not-a-uuid', answers: baseAnswers }, 0).ok, false);
-  const v = E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, changedAny: 'no', storyAny: 'should be dropped', actionsAny: ['other_road'],
-    listAny: [' lights ', '', 'x'.repeat(500)], listAnyNothing: true, changedSafety: 'yes', actionsSafety: ['no_trip', 'bogus', 'used_anyway'], timeSafety: 'dark',
-    listSafety: ['a', 'b'], unclear: 'no' } }, 0);
+  assert.match(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, email: undefined } }, 0).error, /email/);
+  assert.match(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, email: 'a@b' } }, 0).error, /email/);
+  assert.match(E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, email: 'x'.repeat(250) + '@b.com' } }, 0).error, /email/, 'longer than 254 characters is refused, never cut short');
+  const v = E.validateA({ respondentId: uuid(1), answers: { ...baseAnswers, email: ' R@Example.ORG ', name: 'n'.repeat(150), changedAny: 'no',
+    listAny: [' lights ', '', 'x'.repeat(500)], listAnyNothing: true, changedSafety: 'yes', timeSafety: 'dark',
+    listSafety: ['a', 'b'], unclear: 'no', storyAny: 'a field that no longer exists', frequency: 'daily' } }, 0);
   assert.equal(v.ok, true);
+  assert.equal(v.record.email, 'r@example.org'); assert.equal(v.record.name, 'n'.repeat(100));
   const x = v.record.answers;
-  assert.equal(x.storyAny, ''); same(x.actionsAny, []);
   same(x.listAny, ['lights', 'x'.repeat(200)]); assert.equal(x.listAnyNothing, false);
-  same(x.actionsSafety, ['no_trip'], 'used_anyway is no longer an option: the filter asked about a change');
   assert.equal(x.timeSafety, 'dark'); same(x.listSafety, ['a', 'b']); assert.equal(x.unclear, 'no');
   same(x.modes, ['foot', 'bus']);
+  assert.ok(!('storyAny' in x) && !('frequency' in x), 'fields that are not asked are not stored');
   // follow-ups are dropped when the filter answer is not yes
   const n = E.validateA({ respondentId: uuid(2), answers: { ...baseAnswers, changedSafety: 'not_sure', timeSafety: 'dark', storySafety: 'x' } }, 0).record.answers;
   assert.equal(n.timeSafety, null); assert.equal(n.storySafety, '');
 });
 
-test('validation of Form B: version, design and choices are checked', () => {
+test('validation of Form B: version, design, email and choices are checked', () => {
   const freeze = { designVersion: 2, sets: [[0, 1, 2, 3], [1, 2, 3, 4]], items: [] };
-  const good = { respondentId: uuid(2), designVersion: 2, answers: { ...baseAnswers, tookPartBefore: 'no', unclearItems: 'all clear' },
+  const good = { respondentId: uuid(2), designVersion: 2, answers: { ...baseAnswers, unclearItems: 'all clear' },
     bws: [{ set: 1, shown: [4, 2, 1, 3], best: 4, worst: 1, ms: 5000 }, { set: 0, shown: [0, 3, 2, 1], best: 2, worst: 2 }] };
   const v = E.validateB(good, 0, freeze);
   assert.equal(v.ok, true);
   assert.equal(v.record.bws[1].best, null, 'best = worst is treated as a skipped set');
-  assert.equal(v.record.answers.tookPartBefore, 'no'); assert.equal(v.record.answers.unclearItems, 'all clear');
+  assert.equal(v.record.email, 'r@example.org'); assert.equal(v.record.answers.unclearItems, 'all clear');
+  assert.equal(E.validateB({ ...good, answers: { ...good.answers, email: '' } }, 0, freeze).ok, false);
   assert.equal(E.validateB({ ...good, designVersion: 1 }, 0, freeze).ok, false);
   assert.equal(E.validateB({ ...good, bws: [good.bws[0], { set: 1, shown: [4, 2, 1, 3], best: 4, worst: 1 }] }, 0, freeze).ok, false);
   assert.equal(E.validateB({ ...good, bws: [{ set: 1, shown: [4, 2, 1, 0], best: 4, worst: 1 }, good.bws[1]] }, 0, freeze).ok, false);

@@ -31,13 +31,14 @@ var Engine = (function () {
     yesNo: ['yes', 'no'],
     yesNoUnsure: ['yes', 'no', 'not_sure'],
     modes: ['foot', 'bicycle', 'twowheeler', 'car', 'auto_taxi', 'bus', 'train_metro', 'other'],
-    frequency: ['daily', 'few_week', 'few_month', 'less'],
     company: ['alone', 'others', 'both'],
     area: ['dense_city', 'residential', 'campus', 'commercial', 'periurban', 'rural', 'varies'],
-    actions: ['other_road', 'other_transport', 'with_someone', 'other_time', 'no_trip', 'other'],
     timeOfDay: ['day', 'dawn_dusk', 'dark', 'dont_remember']
   };
-  var LIMITS = { short: 200, long: 2000, listItems: 10, pages: 40 };
+  var LIMITS = { short: 200, long: 2000, listItems: 10, pages: 40, email: 254, name: 100 };
+  // Something@domain.tld with no spaces and no empty domain part. 254 characters is the longest address
+  // that can be delivered (RFC 5321). The forms check the same pattern (docs/assets/survey.js).
+  var EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
   // ------------------------------------------------------------------
   // Small numeric helpers
@@ -686,18 +687,26 @@ var Engine = (function () {
     if (a.roads !== 'yes') return 'Not eligible.';
     return null;
   }
+  /** The email, trimmed and in lower case so that the same address always matches; '' if it is not a valid address. */
+  function emailOf(v) {
+    var e = str(v, 1000).toLowerCase();
+    return e.length <= LIMITS.email && EMAIL_RE.test(e) ? e : '';
+  }
   function travelAnswers(a, out) {
     out.modes = many(a.modes, OPTIONS.modes);
     out.modesOther = out.modes.indexOf('other') >= 0 ? str(a.modesOther, LIMITS.short) : '';
-    out.frequency = one(a.frequency, OPTIONS.frequency);
     out.company = one(a.company, OPTIONS.company);
     out.area = one(a.area, OPTIONS.area);
     out.city = str(a.city, LIMITS.short);
   }
+  /** The fields every record has. The email and name are kept beside the answers, not in them, so they can be left out of any shared file. */
   function common(p, now, form) {
+    var a = p.answers || {};
     return {
       form: form,
       id: uuidOk(p.respondentId) ? p.respondentId : null,
+      email: emailOf(a.email),
+      name: str(a.name, LIMITS.name),
       receivedAt: new Date(now).toISOString(),
       startedAt: str(p.startedAt, 40),
       test: p.test === true,
@@ -706,6 +715,11 @@ var Engine = (function () {
       formVersion: str(p.formVersion, 20)
     };
   }
+  function identityError(r) {
+    if (!r.id) return 'Missing respondent id.';
+    if (!r.email) return 'A valid email address is required.';
+    return null;
+  }
 
   function validateA(p, now) {
     if (!p || typeof p !== 'object') return { ok: false, error: 'Empty submission.' };
@@ -713,27 +727,20 @@ var Engine = (function () {
     var e = validateEligibility(a);
     if (e) return { ok: false, error: e };
     var r = common(p, now, 'A');
-    if (!r.id) return { ok: false, error: 'Missing respondent id.' };
+    var ie = identityError(r);
+    if (ie) return { ok: false, error: ie };
     var x = { consent: 'yes', gender: 'woman', age: a.age, roads: 'yes' };
     // Block 1 (A2): no mention of safety
     x.changedAny = one(a.changedAny, OPTIONS.yesNoUnsure);
-    var yesAny = x.changedAny === 'yes';
-    x.storyAny = yesAny ? str(a.storyAny, LIMITS.long) : '';
-    x.actionsAny = yesAny ? many(a.actionsAny, OPTIONS.actions) : [];
-    x.actionsAnyOther = yesAny && x.actionsAny.indexOf('other') >= 0 ? str(a.actionsAnyOther, LIMITS.short) : '';
     x.listAny = list(a.listAny);
     x.listAnyNothing = a.listAnyNothing === true && x.listAny.length === 0;
-    // Block 2 (A3): safety
+    // Block 2 (A3): safety; the episode follow-ups are kept only after a yes
     x.changedSafety = one(a.changedSafety, OPTIONS.yesNoUnsure);
     var yesSafety = x.changedSafety === 'yes';
     x.storySafety = yesSafety ? str(a.storySafety, LIMITS.long) : '';
-    x.actionsSafety = yesSafety ? many(a.actionsSafety, OPTIONS.actions) : [];
-    x.actionsSafetyOther = yesSafety && x.actionsSafety.indexOf('other') >= 0 ? str(a.actionsSafetyOther, LIMITS.short) : '';
     x.timeSafety = yesSafety ? one(a.timeSafety, OPTIONS.timeOfDay) : null;
     x.listSafety = list(a.listSafety);
     x.listSafetyNothing = a.listSafetyNothing === true && x.listSafety.length === 0;
-    x.afterDark = str(a.afterDark, LIMITS.long);
-    x.anythingElse = str(a.anythingElse, LIMITS.long);
     // A4 travel profile, asked after both blocks; A5 debriefing
     travelAnswers(a, x);
     x.unclear = str(a.unclear, LIMITS.long);
@@ -749,12 +756,12 @@ var Engine = (function () {
     var e = validateEligibility(a);
     if (e) return { ok: false, error: e };
     var r = common(p, now, 'B');
-    if (!r.id) return { ok: false, error: 'Missing respondent id.' };
+    var ie = identityError(r);
+    if (ie) return { ok: false, error: ie };
     r.designVersion = freeze.designVersion;
     r.sameDeviceFormA = p.sameDeviceFormA === true;
     var x = { consent: 'yes', gender: 'woman', age: a.age, roads: 'yes' };
     travelAnswers(a, x);
-    x.tookPartBefore = one(a.tookPartBefore, OPTIONS.yesNoUnsure);
     x.unclearItems = str(a.unclearItems, LIMITS.long);
     x.missingItems = str(a.missingItems, LIMITS.long);
     r.answers = x;
@@ -816,10 +823,27 @@ var Engine = (function () {
     return {
       age: tally(records, 'age', OPTIONS.age, false),
       modes: tally(records, 'modes', OPTIONS.modes, true),
-      frequency: tally(records, 'frequency', OPTIONS.frequency, false),
       company: tally(records, 'company', OPTIONS.company, false),
       area: tally(records, 'area', OPTIONS.area, false)
     };
+  }
+  function byTime(x, y) { return x.receivedAt < y.receivedAt ? -1 : x.receivedAt > y.receivedAt ? 1 : 0; }
+
+  /**
+   * One response per person: in time order, a later record with the same email is a repeat and is
+   * left out, so each woman counts once, with the answer she gave before she had seen the form.
+   * Tests are matched among tests only, so a test run never hides a real response.
+   * Returns { first: {id: true}, repeat: {id: true} }.
+   */
+  function firstPerPerson(recordsInTimeOrder) {
+    var seen = {}, out = { first: {}, repeat: {} };
+    recordsInTimeOrder.forEach(function (r) {
+      var k = r.email ? (r.test ? 'test|' : 'real|') + r.email : null;
+      if (k && seen[k]) { out.repeat[r.id] = true; return; }
+      if (k) seen[k] = true;
+      out.first[r.id] = true;
+    });
+    return out;
   }
 
   /**
@@ -843,11 +867,13 @@ var Engine = (function () {
     function codeOf1(key) { return assign[1][key] || null; }
 
     // Test responses (?test=1) are left out, unless the researcher asks to see them to check the forms.
-    // The freeze always runs without them.
+    // The freeze always runs without them. A repeat from the same email is left out (first one kept).
     var withTest = opts.includeTest === true;
-    var allA = data.formA || [];
-    var A = allA.filter(function (r) { return withTest || !r.test; });
-    A.sort(function (x, y) { return x.receivedAt < y.receivedAt ? -1 : x.receivedAt > y.receivedAt ? 1 : 0; });
+    var allA = (data.formA || []).slice().sort(byTime);
+    var onceA = firstPerPerson(allA);
+    var statusA = {};
+    allA.forEach(function (r) { statusA[r.id] = r.test && !withTest ? 'test' : onceA.repeat[r.id] ? 'repeat' : 'kept'; });
+    var A = allA.filter(function (r) { return statusA[r.id] === 'kept'; });
 
     // --- coding table: distinct entries across both lists ---
     var entries = {};
@@ -933,19 +959,15 @@ var Engine = (function () {
 
     var formA = {
       n: A.length, nTest: allA.filter(function (r) { return r.test; }).length,
+      nRepeat: allA.filter(function (r) { return statusA[r.id] === 'repeat'; }).length,
       sample: sampleProfile(A),
       premise: premise,
-      behaviour: { actionsAny: tally(A, 'actionsAny', OPTIONS.actions, true), actionsSafety: tally(A, 'actionsSafety', OPTIONS.actions, true),
-                   timeSafety: tally(A, 'timeSafety', OPTIONS.timeOfDay, false) },
+      timeSafety: tally(A, 'timeSafety', OPTIONS.timeOfDay, false),
       coding: { entries: entryList, coverage: coverage, alpha: alpha },
       salience: { safety: salSafety, unprimed: salUnprimed },
       saturation: sat,
       speedFlagged: speedA.filter(function (s) { return s !== null && s > RSI_FLAG; }).length,
-      texts: {
-        storyAny: texts('storyAny'), storySafety: texts('storySafety'), afterDark: texts('afterDark'),
-        anythingElse: texts('anythingElse'), unclear: texts('unclear'),
-        otherActions: A.map(function (r) { return [r.answers.actionsAnyOther, r.answers.actionsSafetyOther].filter(Boolean).join(' / '); }).filter(Boolean)
-      }
+      texts: { storySafety: texts('storySafety'), unclear: texts('unclear') }
     };
 
     // --- candidate list for Form B (eligible codes in salience order) ---
@@ -957,30 +979,61 @@ var Engine = (function () {
     });
 
     var out = { ok: true, generatedAt: new Date(opts.now || Date.now()).toISOString(), includesTest: withTest, formA: formA, formB: null, config: cfg, codes: codes };
-    out.formB = analyseFormB(data.formB || [], cfg.freeze || null, opts);
+    // Form B must come from women who did not answer Form A: matched by email against real Form A responses only
+    var emailsA = {};
+    allA.forEach(function (r) { if (r.email && !r.test) emailsA[r.email] = true; });
+    var who = {};
+    out.formB = analyseFormB(data.formB || [], cfg.freeze || null, opts, emailsA, who);
+    // the researcher's list of every stored response, by email, with the reason it is in or out of the analysis
+    out.respondents = allA.map(function (r) { return person(r, statusA[r.id], []); })
+      .concat((data.formB || []).slice().sort(byTime).map(function (r) { return person(r, who[r.id].status, who[r.id].flags); }));
     return out;
   }
+  function person(r, status, flags) {
+    return { form: r.form, id: r.id, receivedAt: r.receivedAt, email: r.email || '', name: r.name || '', test: r.test === true,
+             designVersion: r.designVersion === undefined ? null : r.designVersion, status: status, flags: flags };
+  }
 
-  function analyseFormB(allB, freeze, opts) {
+  /**
+   * who (filled in): record id -> { status, flags }. Status is why a response is in or out of the ranking:
+   * 'kept'; 'test' (left out unless tests are included); 'closed' (Form B not open) or 'otherVersion'
+   * (another design version); 'repeat' (the same email answered Form B before, in any version);
+   * 'formA' (the same email answered Form A: Form B needs different women).
+   */
+  function analyseFormB(allBunsorted, freeze, opts, emailsA, who) {
+    var withTest = opts.includeTest === true;
+    var allB = allBunsorted.slice().sort(byTime);
+    var once = firstPerPerson(allB);
+    allB.forEach(function (r) {
+      var s;
+      if (r.test && !withTest) s = 'test';
+      else if (!freeze) s = 'closed';
+      else if (r.designVersion !== freeze.designVersion) s = 'otherVersion';
+      else if (once.repeat[r.id]) s = 'repeat';
+      else if (r.email && emailsA[r.email]) s = 'formA';
+      else s = 'kept';
+      who[r.id] = { status: s, flags: [] };
+    });
     var fb = { open: !!freeze, freeze: freeze, nAll: allB.length };
     if (!freeze) return fb;
     var K = freeze.items.length;
-    var withTest = opts.includeTest === true;
-    var B = allB.filter(function (r) { return (withTest || !r.test) && r.designVersion === freeze.designVersion; });
+    function count(s) { return allB.filter(function (r) { return who[r.id].status === s; }).length; }
+    var B = allB.filter(function (r) { return who[r.id].status === 'kept'; });
     fb.nTest = allB.filter(function (r) { return r.test; }).length;
-    fb.nOtherVersions = allB.filter(function (r) { return (withTest || !r.test) && r.designVersion !== freeze.designVersion; }).length;
+    fb.nOtherVersions = count('otherVersion');
+    fb.nRepeat = count('repeat');
+    fb.nFormA = count('formA');
     fb.n = B.length;
     fb.nAnswered = B.filter(function (r) { return r.bws.some(function (s) { return s.best !== null; }); }).length;
     fb.sample = sampleProfile(B);
-    fb.tookPartBefore = tally(B, 'tookPartBefore', OPTIONS.yesNoUnsure, false);
+    // Earlier participation is settled by the email rules above. The device marks are kept in the data but not
+    // used: a phone is often shared, and the email tells people apart. The one sensitivity flag left is speed.
     var speed = relativeSpeed(B.map(function (r) { return r.pageTimes; }));
-    var FLAGS = ['speed', 'tookPartBefore', 'deviceFormA', 'repeatDevice'];
+    var FLAGS = ['speed'];
     B.forEach(function (r, i) {
       r._flags = [];
       if (speed[i] !== null && speed[i] > RSI_FLAG) r._flags.push('speed');
-      if (r.answers.tookPartBefore === 'yes') r._flags.push('tookPartBefore');
-      if (r.sameDeviceFormA) r._flags.push('deviceFormA');
-      if (r.sameDeviceRepeat) r._flags.push('repeatDevice');
+      who[r.id].flags = r._flags.slice();
     });
     function obsOf(recs) {
       var obs = [];
@@ -1081,7 +1134,7 @@ var Engine = (function () {
       designVersion: (prevVersion || 0) + 1,
       frozenAt: new Date(now || Date.now()).toISOString(),
       k: k,
-      rule: 'Top ' + k + ' parameters by Smith\'s salience index on the Form A safety list (A3.5), excluding codes marked "not safety" and codes listed by fewer than ' + MIN_MENTIONS + ' respondents; ties broken by frequency, then mean position.',
+      rule: 'Top ' + k + ' parameters by Smith\'s salience index on the Form A safety list (A3.4), excluding codes marked "not safety" and codes listed by fewer than ' + MIN_MENTIONS + ' respondents; ties broken by frequency, then mean position.',
       tieAtCutoff: tie,
       nFormA: A.n,
       saturation: A.saturation.primary.label,
@@ -1094,7 +1147,7 @@ var Engine = (function () {
   }
 
   return {
-    EXCLUDE: EXCLUDE, OPTIONS: OPTIONS, LIMITS: LIMITS, THREAT_WORDS: THREAT_WORDS, CRITERION_WORDS: CRITERION_WORDS,
+    EXCLUDE: EXCLUDE, OPTIONS: OPTIONS, LIMITS: LIMITS, EMAIL_RE: EMAIL_RE, THREAT_WORDS: THREAT_WORDS, CRITERION_WORDS: CRITERION_WORDS,
     K_MIN: K_MIN, K_MAX: K_MAX, SET_SIZE: SET_SIZE, MIN_MENTIONS: MIN_MENTIONS, MAX_CODES_PER_ENTRY: MAX_CODES_PER_ENTRY,
     RSI_CLIP: RSI_CLIP, RSI_FLAG: RSI_FLAG,
     quantile: quantile, quantileDiscrete: quantileDiscrete, median: median, wilson: wilson, rng: rng, spearman: spearman, ranksDesc: ranksDesc,
@@ -1104,7 +1157,7 @@ var Engine = (function () {
     maxdiffLoglik: maxdiffLoglik, sequentialLoglik: sequentialLoglik, fitMaxdiff: fitMaxdiff, fitSequential: fitSequential,
     softmax: softmax, krinskyRobb: krinskyRobb,
     relativeSpeed: relativeSpeed, validateA: validateA, validateB: validateB, wordingCheck: wordingCheck, wordingProblems: wordingProblems,
-    buildResults: buildResults, buildFreeze: buildFreeze, hash32: hash32
+    buildResults: buildResults, buildFreeze: buildFreeze, hash32: hash32, firstPerPerson: firstPerPerson
   };
 })();
 

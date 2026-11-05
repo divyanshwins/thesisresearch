@@ -50,9 +50,9 @@ async function post(body) {
 }
 async function get(action) { return (await fetch(BASE + '/api?action=' + action)).json(); }
 
-function profile() {
-  return { consent: 'yes', gender: 'woman', age: pick(['18_24', '18_24', '25_34', '35_44']), roads: 'yes',
-    modes: [pick(['foot', 'bus', 'auto_taxi', 'train_metro', 'twowheeler'])], frequency: pick(['daily', 'few_week']), company: pick(['alone', 'both', 'others']), area: pick(['dense_city', 'residential', 'campus']) };
+function profile(email) {
+  return { consent: 'yes', gender: 'woman', age: pick(['18_24', '18_24', '25_34', '35_44']), roads: 'yes', email,
+    modes: [pick(['foot', 'bus', 'auto_taxi', 'train_metro', 'twowheeler'])], company: pick(['alone', 'both', 'others']), area: pick(['dense_city', 'residential', 'campus']) };
 }
 function freeList(safetyOnly) {
   const out = [];
@@ -72,12 +72,12 @@ function freeList(safetyOnly) {
     const changedSafety = rand() < 0.75 ? 'yes' : pick(['no', 'not_sure']);
     const fast = i % 13 === 5;   // a few respondents who rush every page
     const t = (ms) => Math.round((fast ? 0.25 : 1) * ms * (0.7 + 0.6 * rand()));
-    await post({ action: 'submitA', payload: { formVersion: 'A-2.0', respondentId: uuid(), startedAt: new Date().toISOString(),
-      pageTimes: { consent: t(12000), elig: t(9000), change: t(6000), list: t(55000), safety: t(7000), safetyList: t(65000), more: t(8000), travel: t(15000), debrief: t(6000) },
-      answers: { ...profile(), changedAny, storyAny: changedAny === 'yes' ? 'The lane was narrow and there was nobody else walking.' : '', actionsAny: changedAny === 'yes' ? ['other_road'] : [],
-        listAny: freeList(false), changedSafety, actionsSafety: changedSafety === 'yes' ? [pick(['other_road', 'with_someone', 'other_transport'])] : [],
+    await post({ action: 'submitA', payload: { formVersion: 'A-3.0', respondentId: uuid(), startedAt: new Date().toISOString(),
+      pageTimes: { consent: t(15000), elig: t(14000), list: t(60000), safety: t(7000), safetyStory: t(30000), safetyList: t(65000), travel: t(12000), debrief: t(6000) },
+      answers: { ...profile('sim-a' + i + '@example.org'), changedAny, listAny: freeList(false), changedSafety,
+        storySafety: changedSafety === 'yes' ? 'The lane was narrow and there was nobody else walking.' : '',
         timeSafety: changedSafety === 'yes' ? pick(['dark', 'day', 'dawn_dusk']) : null,
-        listSafety: freeList(true), afterDark: rand() < 0.3 ? 'Lighting matters more after dark' : '' } } });
+        listSafety: freeList(true) } } });
   }
   console.log('Form A: sent', NA);
 
@@ -107,8 +107,8 @@ function freeList(safetyOnly) {
     });
     const pt = { consent: 7000, elig: 8000, practice: 15000, travel: 14000, debrief: 6000 };
     bws.forEach((b) => { pt['set' + b.set] = b.ms; });
-    await post({ action: 'submitB', payload: { formVersion: 'B-2.0', respondentId: uuid(), designVersion: cfg.formB.designVersion, startedAt: new Date().toISOString(),
-      pageTimes: pt, answers: { ...profile(), tookPartBefore: pick(['no', 'no', 'no', 'not_sure']) }, bws } });
+    await post({ action: 'submitB', payload: { formVersion: 'B-3.0', respondentId: uuid(), designVersion: cfg.formB.designVersion, startedAt: new Date().toISOString(),
+      pageTimes: pt, answers: profile('sim-b' + r + '@example.org'), bws } });
   }
   console.log('Form B: sent', NB);
 

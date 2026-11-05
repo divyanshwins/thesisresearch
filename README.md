@@ -6,7 +6,7 @@ This is a two-stage survey with women, with a backend that does all the maths.
 |---|---|
 | `docs/form-a.html` | **Form A (Stage 1).** Women list, in their own words, what about a road changes whether they use it, first without and then with mention of safety. Nothing before the safety block (the consent included) mentions safety. |
 | `docs/form-b.html` | **Form B (Stage 2).** Best-worst sets built from the most salient Form A parameters. It opens only after you freeze the list. |
-| `docs/analytics.html` | **Analytics (researcher only).** Coding of Form A answers, salience, saturation, the freeze step, the **live final ranking** with 95% intervals, quality checks and CSV export. |
+| `docs/analytics.html` | **Analytics (researcher only).** Coding of Form A answers, salience, saturation, the freeze step, the **live final ranking** with 95% intervals, quality checks, every response listed by email, and CSV export. |
 
 Every calculation and its source is listed in **[METHODS.md](METHODS.md)**.
 
@@ -47,21 +47,25 @@ Vercel or GitHub Pages (docs/)  --->  Google Apps Script web app (backend/Code.g
 
 **3. Check it**
 - Open `form-a.html?test=1` and `form-b.html?test=1`. With `?test=1` your answers are stored as tests and left out of every result.
-- Open `analytics.html` and enter the researcher key. Tick **Include tests** in the top bar to see the test answers go through coding and the ranking. A banner stays up while it is on, and freezing always ignores tests. Untick it before reading any result.
+- Open `analytics.html` and enter the researcher key. **Respondents** lists every response by email, tests included and marked. Tick **Include tests** in the top bar to see the test answers go through coding and the ranking. A banner stays up while it is on, and freezing always ignores tests. Untick it before reading any result.
 - `form-b.html?preview=1` shows Form B with the placeholder items, even before the list is frozen. Nothing is sent. Use it to show someone the format.
 
 **If you change the backend code later:** use Deploy → Manage deployments → edit (pencil) → Version: New version. The URL stays the same.
 
 ## Running the study
 
-1. **Get ethics approval** for both forms before sending any link. Ask specifically about the incomplete disclosure in Form A: the consent describes the study as being about road choice, and safety is named only at the start of the second block, with a debrief at the end (see METHODS.md).
+1. **Get ethics approval** for both forms before sending any link. Ask specifically about two things (see METHODS.md):
+   - the incomplete disclosure in Form A: the consent describes the study as being about road choice, and safety is named only at the start of the second block, with a debrief at the end;
+   - the email address: answers are confidential, not anonymous. State where the emails are kept (your Google Sheet), who sees them (you), and that you delete them when the study ends.
 2. **Send the Form A link** (`…/form-a.html`) to women in your target group.
 3. **Code the answers.** In Analytics → **Coding**, create codes from the women's words and assign every entry. If an entry names two or three things ("dark and empty"), press **Split** and code each, in the order written. Write each code's label as a neutral dimension, for example "How well lit the road is". The label and one-line description are exactly what Form B respondents will see. Optionally, a second person codes the blind 30% sample (Coder 2) to get Krippendorff's α.
 4. **Keep collecting** until **Form A → Saturation** says *Reached*.
 5. **Freeze the list.** In **Form B setup**, keep K = 12 unless you have a reason to change it (the allowed range is 8–16), read the checks, and press **Freeze**. Form B opens. The backend refuses labels that presuppose a threat or repeat the word "safe", and parameters listed by only one respondent.
-6. **Send the Form B link** to a **different** group of women. Aim for 50 or more.
+6. **Send the Form B link** to a **different** group of women. Aim for 50 or more counted responses. A Form B response from an email that answered Form A is left out of the ranking automatically (see **Quality**).
 7. **Watch the ranking.** **Final ranking** updates as responses arrive. Report the order with its 95% intervals.
-8. **Export.** The **Export** tab gives every raw table in long format, ready for R, Stata or SPSS.
+8. **Export.** The **Export** tab gives every raw table in long format, ready for R, Stata or SPSS. Emails and names are only in `respondents_by_email.csv`; the other files can be shared.
+9. **If someone asks to withdraw.** In **Respondents**, search her email. Then, in the Google Sheet, delete her rows on the **FormA** and **FormB** tabs (each row is one response; press Ctrl+F or Cmd+F and search the email). The analysis updates on the next refresh. If the Form B list was already frozen from her Form A answers, say so in the report.
+10. **When the study ends,** delete the emails and names as the consent promises. Download the export, keep every file except `respondents_by_email.csv` (those files hold all the answers, linked only by random IDs), then delete `respondents_by_email.csv` and the Google Sheet.
 
 ## Working on the code locally
 
@@ -111,9 +115,11 @@ METHODS.md             formulas, sources, limitations
 
 ## Privacy, navigation and security
 
-- **What is stored.** The forms collect no names, emails or contact details. A random ID per response is stored, plus the time spent on each page (used only for the speed check).
-- **Device flag.** The browser remembers that a form was already submitted on that device, only to flag possible repeats. Test runs (`?test=1`) are remembered separately and never flag a real response. The consent page says that answers are kept on the device until submission.
+- **What is stored.** Each response has a random ID, the respondent's email address (required) and name (optional), her answers, and the time spent on each page (used only for the speed check). The email and name sit beside the answers, not in them.
+- **What the email does.** Each woman counts once in each form: a later response from the same email stays in the Sheet but is left out of the analysis. A Form B response from an email that answered Form A is left out of the ranking, because Form B needs different women. Tests are matched only with tests.
+- **Who sees it.** Only someone with the researcher key, on the **Respondents** tab and in `respondents_by_email.csv`. Every other export links answers through the random ID alone, and `results.json` leaves the emails out. Never put an email in a report.
+- **Device flag.** The browser still remembers that a form was submitted on that device, but this is no longer used in the analysis: a phone is often shared, and the email tells people apart. Test runs (`?test=1`) are remembered separately. The consent page says that answers are kept on the device until submission.
 - **Back button.** Every page has Back, except the first page of the safety block in Form A. Going back there would let a respondent revise her unprimed answers after safety was named. The last unprimed page warns her before she leaves it. On the first page, Back leaves the survey. After a screen-out (no consent, not eligible), Back returns to the question so that a mis-tap can be corrected; nothing is kept on the device unless she does.
 - **Third parties.** The pages load the Geist typeface from Google Fonts; nothing else is loaded from outside the site and the backend.
 - **Researcher key.** Analytics, coding, freezing and export need the researcher key. The key is checked by the backend, never stored in this repository, and kept only for the open browser tab.
-- **The Sheet.** Do not share the Google Sheet publicly. It holds the raw answers.
+- **The Sheet.** Do not share the Google Sheet with anyone. It holds the raw answers and the email addresses.
