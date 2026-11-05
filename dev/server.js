@@ -7,7 +7,8 @@
  *
  *   npm run dev            -> http://localhost:8787
  *   PORT=9000 npm run dev  -> another port
- *   MISSING=GITHUB_TOKEN npm run dev   -> how the site looks before Vercel has its secrets
+ *   MISSING=storage npm run dev  -> how the site looks before storage is connected
+ *   TRUSTED=1 npm run dev        -> analytics opens with no key, as at the private Vercel address
  */
 const http = require('http');
 const fs = require('fs');
@@ -20,7 +21,10 @@ const DOCS = path.join(__dirname, '..', 'docs');
 const STORE = process.env.STORE || path.join(__dirname, 'data', 'local.json');
 const KEY = 'dev-key';
 
-const app = createApp({ store: fileStore(STORE), researcherKey: KEY, wrongKeyDelay: 0, missing: process.env.MISSING ? process.env.MISSING.split(',') : [] });
+const TRUSTED = process.env.TRUSTED === '1';
+const app = createApp({ store: fileStore(STORE), researcherKey: TRUSTED ? null : KEY, wrongKeyDelay: 0, missing: process.env.MISSING ? process.env.MISSING.split(',') : [],
+  researcherUrl: 'http://localhost:' + PORT + '/analytics.html' });
+const meta = { trusted: TRUSTED };
 const SECURITY = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8')).headers[0].headers.map((x) => [x.key, x.value]));
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -36,11 +40,11 @@ http.createServer((req, res) => {
   if (url.pathname === '/api') {
     const done = (out) => send(res, 200, JSON.stringify(out), 'application/json');
     const fail = (err) => done({ ok: false, error: String(err && err.message ? err.message : err) });
-    if (req.method === 'GET') return app.get(Object.fromEntries(url.searchParams)).then(done, fail);
+    if (req.method === 'GET') return app.get(Object.fromEntries(url.searchParams), meta).then(done, fail);
     if (req.method === 'POST') {
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
-      req.on('end', () => app.post(body).then(done, fail));
+      req.on('end', () => app.post(body, meta).then(done, fail));
       return;
     }
     return send(res, 405, 'Method not allowed', 'text/plain');
@@ -54,6 +58,6 @@ http.createServer((req, res) => {
     send(res, 200, data, TYPES[path.extname(file)] || 'application/octet-stream');
   });
 }).listen(PORT, () => {
-  console.log(`Local preview: http://localhost:${PORT}  (researcher key: ${KEY})`);
+  console.log(`Local preview: http://localhost:${PORT}  (${TRUSTED ? 'analytics opens without a key' : 'researcher key: ' + KEY})`);
   console.log(`Data file: ${STORE}`);
 });

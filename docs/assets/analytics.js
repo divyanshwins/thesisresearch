@@ -10,7 +10,7 @@
   var EXCLUDE = '__exclude__', MAX_CODES = 3, K_MIN = 8, K_MAX = 16, MIN_MENTIONS = 2;
   var PLANNED_B = (window.APP_CONFIG && window.APP_CONFIG.plannedSampleB) || 50;
   var S = { key: null, res: null, tab: 'ranking', coder: 1, pending: { 1: {}, 2: {} }, codeEdits: {}, deleted: {},
-            filter: 'uncoded', list: 'all', search: '', auto: false, timer: null, k: 12, busy: false, error: null, includeTest: false,
+            filter: 'uncoded', list: 'all', search: '', k: 12, busy: false, error: null, includeTest: false,
             who: '', raw: null };
 
   // ---------------------------------------------------------------- helpers
@@ -77,20 +77,16 @@
     if (main) main.style.opacity = '0.6';
     API.post({ action: 'results', key: S.key, includeTest: S.includeTest }).then(function (res) {
       S.res = res; S.error = null; S.busy = false;
-      session('researcherKey', S.key);
+      if (S.key) session('researcherKey', S.key);
       render();
     }).catch(function (err) {
       S.busy = false;
-      if (/researcher key/i.test(err.message)) { S.key = null; session('researcherKey', null); login(err.message); return; }
+      if (/researcher key|private address/i.test(err.message)) { S.key = null; session('researcherKey', null); login(err.message); return; }
       S.error = err.message;
       if (S.res) render(); else login(err.message);
     });
   }
-  function setAuto(on) {
-    S.auto = on;
-    if (S.timer) clearInterval(S.timer);
-    S.timer = on ? setInterval(function () { if (!pendingCount() && document.visibilityState === 'visible') load(); }, 60000) : null;
-  }
+  // No automatic refresh: on the free storage plan every refresh counts against a monthly allowance.
   function act(body, okMsg) {
     body.key = S.key;
     S.busy = true;
@@ -111,12 +107,26 @@
     app.textContent = '';
     app.appendChild(bar());
     if (!API.connected) {
-      var missing = API.missing && API.missing.length ? API.missing.join(' and ') : 'GITHUB_TOKEN and RESEARCHER_KEY';
+      var missing = API.missing && API.missing.length ? API.missing.join(' and ') : 'storage';
       app.appendChild(h('div', { class: 'panel login' }, [
         h('h1', { text: 'Analytics' }),
-        h('p', { class: 'muted', text: 'The study is not connected to its storage yet, so nothing is being saved and there are no results to show. Set ' + missing +
-          ' in Vercel (Project → Settings → Environment Variables), then redeploy. Until then the forms run as a labelled preview.' })
+        h('p', { class: 'muted', text: 'The study is not connected to its storage yet (missing: ' + missing + '), so nothing is being saved and there are no results to show. Until then the forms run as a labelled preview.' })
       ]));
+      return;
+    }
+    // no researcher key is set: analytics opens only at the private address, behind Vercel's own sign-in
+    if (API.researcher === 'private-address') {
+      app.appendChild(h('div', { class: 'panel login' }, [
+        h('h1', { text: 'Analytics' }),
+        h('p', { class: 'muted', text: 'Analytics is not open at this public address. Open the study’s private address; Vercel asks you to sign in with the account that owns the project, and analytics opens with no password.' }),
+        API.researcherUrl ? h('p', {}, [h('a', { href: API.researcherUrl, text: API.researcherUrl })]) : null,
+        error && !/private address/i.test(error) ? h('p', { class: 'notice error', text: error }) : null
+      ]));
+      return;
+    }
+    if (API.researcher === 'signed-in') {
+      app.appendChild(h('div', { class: 'panel login' }, [h('h1', { text: 'Analytics' }), h('p', { class: 'notice error', text: error || 'The results could not be loaded.' }),
+        h('div', { class: 'nav' }, [h('button', { class: 'btn primary', type: 'button', text: 'Try again', onclick: function () { load(); } })])]));
       return;
     }
     var input = h('input', { type: 'password', id: 'key', autocomplete: 'current-password' });
@@ -137,17 +147,15 @@
   function render() {
     var res = S.res;
     app.textContent = '';
-    var auto = h('input', { type: 'checkbox', checked: S.auto, id: 'auto' });
-    auto.addEventListener('change', function () { setAuto(auto.checked); });
     var withTest = h('input', { type: 'checkbox', checked: S.includeTest, id: 'withtest' });
     withTest.addEventListener('change', function () { S.includeTest = withTest.checked; load(); });
     var stamp = new Date(res.generatedAt);
     app.appendChild(bar([
       h('span', { class: 'num', text: 'Updated ' + stamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }),
-      h('label', { class: 'row auto', for: 'auto' }, [auto, 'Every minute']),
       h('label', { class: 'row', for: 'withtest' }, [withTest, 'Include tests']),
       h('button', { class: 'btn small secondary', type: 'button', text: 'Refresh', onclick: function () { load(); } }),
-      h('button', { class: 'btn small secondary', type: 'button', text: 'Sign out', onclick: function () { session('researcherKey', null); S.key = null; setAuto(false); login(); } })
+      // signed in through Vercel there is no key to forget; Vercel's own sign-in covers the tab
+      S.key ? h('button', { class: 'btn small secondary', type: 'button', text: 'Sign out', onclick: function () { session('researcherKey', null); S.key = null; login(); } }) : null
     ]));
     var canvas = h('div', { class: 'canvas' });
     app.appendChild(canvas);
@@ -812,10 +820,12 @@
   window.addEventListener('beforeunload', function (e) { if (pendingCount()) { e.preventDefault(); e.returnValue = ''; } });
   app.appendChild(bar());
   app.appendChild(h('p', { class: 'canvas muted', text: 'Loading…' }));
-  // the config call says whether the backend's storage is set up; only then is the key asked for
+  // the config call says whether the storage is set up and how the researcher gets in
   API.get('config').then(function () {
+    if (!API.connected) { login(); return; }
+    if (API.researcher === 'signed-in') { S.key = null; load(); return; }
     var saved = session('researcherKey');
-    if (!API.connected || !saved) { login(); return; }
+    if (API.researcher !== 'key' || !saved) { login(); return; }
     S.key = saved; load();
   }).catch(function (err) { login('The backend could not be reached: ' + err.message); });
 })();

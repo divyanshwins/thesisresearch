@@ -1,7 +1,8 @@
 'use strict';
-// Runs the real backend (backend/app.js + engine.js) end to end, twice: once on the local file
-// store, and once through the GitHub store (backend/store-github.js) against a stand-in GitHub
-// API in test/github-mock.js. Every action is checked in both.
+// Runs the real backend (backend/app.js + engine.js) end to end, three times: on the local file
+// store, through the Vercel Blob store (backend/store-blob.js) against a stand-in SDK in
+// test/blob-fake.js, and through the GitHub store (backend/store-github.js) against a stand-in
+// GitHub API in test/github-mock.js. Every action is checked on all three.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -9,7 +10,10 @@ const path = require('path');
 const { createApp } = require('../backend/app');
 const { fileStore } = require('../backend/store-file');
 const { githubStore } = require('../backend/store-github');
+const { blobStore } = require('../backend/store-blob');
 const { startGithubMock } = require('./github-mock');
+const { createBlobFake } = require('./blob-fake');
+const noWait = () => Promise.resolve();
 
 const uuid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
 const mail = (n) => 'woman' + n + '@example.org';
@@ -21,23 +25,26 @@ after(async () => { await mock.close(); });
 
 /** A fresh backend with key 'k' on the chosen store, with helpers to look inside the stored data. */
 function fresh(kind) {
-  let store, repo = null;
+  let store, repo = null, blob = null;
   if (kind === 'file') store = fileStore(null);
+  else if (kind === 'blob') { blob = createBlobFake(); store = blobStore({ sdk: blob.sdk, sleep: noWait }); }
   else {
     repo = mock.createRepo('data' + (++repoCount), repoCount % 2 === 0);   // half start empty, half with a README
-    store = githubStore({ token: mock.token, repo: 'o/' + repo.name, apiBase: mock.base, sleep: () => Promise.resolve() });
+    store = githubStore({ token: mock.token, repo: 'o/' + repo.name, apiBase: mock.base, sleep: noWait });
   }
   const app = createApp({ store, researcherKey: 'k', wrongKeyDelay: 0 });
+  const blobFiles = (prefix) => Array.from(blob.files.entries()).filter(([p]) => p.startsWith(prefix)).map(([, f]) => JSON.parse(f.body));
   const filesOf = (form) => (kind === 'file' ? Object.values(store.data.responses[form])
+    : kind === 'blob' ? blobFiles('responses/' + form + '/')
     : (fs.existsSync(path.join(repo.dir, 'responses', form)) ? fs.readdirSync(path.join(repo.dir, 'responses', form)).map((f) => JSON.parse(fs.readFileSync(path.join(repo.dir, 'responses', form, f), 'utf8'))) : []));
   return {
-    kind, store, repo,
+    kind, store, repo, blob,
     post: (obj) => app.post(JSON.stringify(obj)),
     postRaw: (s) => app.post(s),
     get: (p) => app.get(p),
     count: (form) => filesOf(form).length,
     record: (form, id) => filesOf(form).find((r) => r.id === id),
-    stateText: () => (kind === 'file' ? JSON.stringify(store.data.state) : fs.readFileSync(path.join(repo.dir, 'state.json'), 'utf8'))
+    stateText: () => (kind === 'file' ? JSON.stringify(store.data.state) : kind === 'blob' ? blob.files.get('state.json').body : fs.readFileSync(path.join(repo.dir, 'state.json'), 'utf8'))
   };
 }
 
@@ -66,7 +73,7 @@ async function submitFormA(b, n) {
   }
 }
 
-for (const kind of ['file', 'github']) {
+for (const kind of ['file', 'blob', 'github']) {
   const t = (name, fn) => test('[' + kind + ' store] ' + name, fn);
 
   t('before anything is saved: ping, and Form A open with Form B closed', async () => {
@@ -357,38 +364,108 @@ test('[github store] every response file and every settings change is its own co
   assert.ok(!log.join(' ').includes('@'), 'no email in any commit message');
 });
 
+// ---------------------------------------------------------------- Vercel Blob-specific behaviour
+
+test('[blob store] the free allowance: one listing per analysis, each response read once, public settings from the cache', async () => {
+  const fake = createBlobFake();
+  let clock = 0;
+  const app = createApp({ store: blobStore({ sdk: fake.sdk, sleep: noWait, now: () => clock }), researcherKey: 'k', wrongKeyDelay: 0 });
+  const b = { post: (obj) => app.post(JSON.stringify(obj)) };
+  await submitFormA(b, 30);
+  // a submission is one upload, plus one read of the settings to check that the form is still open
+  assert.deepEqual({ advanced: fake.ops.advanced, simple: fake.ops.simple }, { advanced: 30, simple: 30 });
+  const results = async () => assert.equal((await b.post({ action: 'results', key: 'k' })).formA.n, 30);
+  await results();
+  assert.deepEqual({ advanced: fake.ops.advanced, simple: fake.ops.simple }, { advanced: 31, simple: 60 }, 'one listing, and each response downloaded once');
+  for (let i = 0; i < 9; i++) await results();
+  assert.deepEqual({ advanced: fake.ops.advanced, simple: fake.ops.simple }, { advanced: 31, simple: 60 }, 'refreshes within 20 s reuse the listing');
+  for (let i = 0; i < 10; i++) { clock += 60000; await results(); }
+  assert.deepEqual({ advanced: fake.ops.advanced, simple: fake.ops.simple }, { advanced: 41, simple: 60 }, 'later refreshes list again but never download a response twice');
+  const before = fake.ops.simple;
+  for (let i = 0; i < 20; i++) await app.get({ action: 'config' });
+  assert.ok(fake.ops.simple - before <= 1, 'with no settings saved yet, twenty form openings cost at most one read: ' + (fake.ops.simple - before));
+  await app.post(JSON.stringify({ action: 'setFormA', key: 'k', open: true }));
+  const mid = fake.ops.simple;
+  for (let i = 0; i < 20; i++) await app.get({ action: 'config' });
+  assert.ok(fake.ops.simple - mid <= 1, 'twenty form openings cost at most one uncached read: ' + (fake.ops.simple - mid));
+});
+
+test('[blob store] a listing older than 20 seconds is refreshed, so other instances’ responses appear', async () => {
+  const fake = createBlobFake();
+  let clock = 1000;
+  const store = blobStore({ sdk: fake.sdk, sleep: noWait, now: () => clock });
+  const app = createApp({ store, researcherKey: 'k', wrongKeyDelay: 0 });
+  await app.post(JSON.stringify({ action: 'submitA', payload: { respondentId: uuid(1), answers: { ...elig, email: mail(1) } } }));
+  assert.equal((await app.post(JSON.stringify({ action: 'results', key: 'k' }))).formA.n, 1);
+  // another server instance saves a response directly
+  await fake.sdk.put('responses/A/' + uuid(2) + '.json', JSON.stringify({ form: 'A', id: uuid(2), email: mail(2), receivedAt: new Date().toISOString(), answers: { ...elig, listAny: [], listSafety: [] }, pageTimes: {} }), { access: 'private' });
+  assert.equal((await app.post(JSON.stringify({ action: 'results', key: 'k' }))).formA.n, 1, 'within 20 s the earlier listing is reused');
+  clock += 21000;
+  assert.equal((await app.post(JSON.stringify({ action: 'results', key: 'k' }))).formA.n, 2);
+});
+
+test('[blob store] duplicates, a busy service, and settings changed elsewhere', async () => {
+  const fake = createBlobFake();
+  const store = blobStore({ sdk: fake.sdk, sleep: noWait });
+  const app = createApp({ store, researcherKey: 'k', wrongKeyDelay: 0 });
+  const p = { respondentId: uuid(1), answers: { ...elig } };
+  fake.faults.rateLimitNextPut = 1;
+  assert.equal((await app.post(JSON.stringify({ action: 'submitA', payload: p }))).ok, true, 'one retry after a rate limit');
+  assert.equal((await app.post(JSON.stringify({ action: 'submitA', payload: p }))).duplicate, true);
+  assert.equal(Array.from(fake.files.keys()).filter((k) => k.startsWith('responses/')).length, 1);
+  const { version } = await store.readState();
+  await store.writeState({ config: { formAOpen: true } }, version, 'first');
+  await assert.rejects(store.writeState({ config: { formAOpen: false } }, version, 'from stale settings'), /changed somewhere else/);
+  const now = await store.readState();
+  await store.writeState({ config: { formAOpen: false } }, now.version, 'from fresh settings');
+  assert.equal(JSON.parse(fake.files.get('state.json').body).config.formAOpen, false);
+  for (const [p2, f] of fake.files) assert.ok(!p2.startsWith('responses/') || f.contentType === 'application/json');
+});
+
+test('[blob store] errors from Vercel are explained', async () => {
+  const sdk = { list: async () => { const e = new Error('x'); e.name = 'BlobStoreSuspendedError'; throw e; } };
+  const app = createApp({ store: blobStore({ sdk, sleep: noWait }), researcherKey: 'k', wrongKeyDelay: 0 });
+  assert.match((await app.post(JSON.stringify({ action: 'results', key: 'k' }))).error, /suspended.*allowance/);
+});
+
 // ---------------------------------------------------------------- the Vercel entry point
 
-function vercelRequest(method, url, body) {
+function vercelRequest(method, url, body, headers) {
   const { Readable } = require('stream');
   const req = Readable.from(body ? [Buffer.from(body)] : []);
-  req.method = method; req.url = url;
+  req.method = method; req.url = url; req.headers = Object.assign({ host: 'thesisresearch.vercel.app' }, headers || {});
   if (method === 'GET') req.query = Object.fromEntries(new URL(url, 'http://x').searchParams);
   if (body !== undefined) req.body = body;           // Vercel hands text/plain bodies over as a string
   const res = { statusCode: 200, headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, end(s) { this.body = s; } };
   return { req, res };
 }
-async function callVercel(handler, method, url, body) {
-  const { req, res } = vercelRequest(method, url, body);
+async function callVercel(handler, method, url, body, headers) {
+  const { req, res } = vercelRequest(method, url, body, headers);
   await handler(req, res);
   return { status: res.statusCode, headers: res.headers, json: JSON.parse(res.body) };
 }
-function freshHandler(env) {
-  const keys = ['GITHUB_TOKEN', 'RESEARCHER_KEY', 'DATA_REPO'];
-  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  keys.forEach((k) => { if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; });
+const ENV_KEYS = ['GITHUB_TOKEN', 'RESEARCHER_KEY', 'DATA_REPO', 'BLOB_STORE_ID', 'BLOB_READ_WRITE_TOKEN', 'VERCEL_BRANCH_URL', 'VERCEL_URL', 'VERCEL_PROJECT_PRODUCTION_URL'];
+function freshHandler(env, blobSdk) {
+  const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+  ENV_KEYS.forEach((k) => { if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; });
+  const sdkPath = require.resolve('@vercel/blob');
+  const savedSdk = require.cache[sdkPath];
+  if (blobSdk) require.cache[sdkPath] = { id: sdkPath, filename: sdkPath, loaded: true, exports: blobSdk };
   delete require.cache[require.resolve('../api/index.js')];
   const handler = require('../api/index.js');
-  return { handler, restore: () => keys.forEach((k) => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }) };
+  return { handler, restore: () => {
+    ENV_KEYS.forEach((k) => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; });
+    if (savedSdk) require.cache[sdkPath] = savedSdk; else delete require.cache[sdkPath];
+  } };
 }
 
-test('[vercel] without its secrets the function says what is missing, and refuses to save', async () => {
+test('[vercel] with no storage connected the function says so, and refuses to save', async () => {
   const { handler, restore } = freshHandler({ RESEARCHER_KEY: 'short' });
   try {
     const cfg = await callVercel(handler, 'GET', '/api?action=config');
     assert.equal(cfg.json.ok, true);
     assert.equal(cfg.json.configured, false);
-    assert.deepEqual(cfg.json.missing, ['GITHUB_TOKEN', 'RESEARCHER_KEY (at least 16 characters)']);
+    assert.deepEqual(cfg.json.missing, ['a private Vercel Blob store connected to the project']);
     assert.equal(cfg.headers['cache-control'], 'no-store');
     const sub = await callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'submitA', payload: {} }));
     assert.equal(sub.json.ok, false);
@@ -397,7 +474,70 @@ test('[vercel] without its secrets the function says what is missing, and refuse
   } finally { restore(); }
 });
 
-test('[vercel] with its secrets the function saves to the data repository and answers the analytics page', async () => {
+const PROD = 'thesisresearch.vercel.app', BRANCH = 'thesisresearch-git-main-owner.vercel.app', DEPLOY = 'thesisresearch-abc123-owner.vercel.app';
+const blobEnv = { BLOB_STORE_ID: 'store_test', VERCEL_BRANCH_URL: BRANCH, VERCEL_URL: DEPLOY, VERCEL_PROJECT_PRODUCTION_URL: PROD };
+/** Stands in for the function asking its own private address whether Vercel's sign-in protects it. */
+function withProtection(answer, fn) {
+  const real = global.fetch;
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith('https://' + BRANCH + '/api?action=ping')) {
+      if (answer === 'error') throw new Error('network down');
+      return answer === 'on' ? new Response('', { status: 302, headers: { location: 'https://vercel.com/sso-api?url=x' } }) : new Response('{"ok":true}', { status: 200 });
+    }
+    return real(url, init);
+  };
+  return fn().finally(() => { global.fetch = real; });
+}
+
+test('[vercel] Blob storage: the public address saves answers but never opens analytics; the signed-in private address does', async () => {
+  const fake = createBlobFake();
+  const { handler, restore } = freshHandler(blobEnv, fake.sdk);
+  try {
+    await withProtection('on', async () => {
+      const pub = await callVercel(handler, 'GET', '/api?action=config');
+      assert.equal(pub.json.configured, true);
+      assert.equal(pub.json.researcher, 'private-address');
+      assert.equal(pub.json.researcherUrl, 'https://' + BRANCH + '/analytics.html');
+      const sub = await callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'submitA', payload: { respondentId: uuid(1), answers: { ...elig } } }), { origin: 'https://' + PROD });
+      assert.equal(sub.json.ok, true, JSON.stringify(sub.json));
+      assert.ok(fake.files.has('responses/A/' + uuid(1) + '.json'));
+      const results = (headers) => callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'results' }), headers);
+      assert.match((await results({ origin: 'https://' + PROD })).json.error, /private address/, 'never from the public address');
+      assert.equal((await results({ host: PROD, 'x-forwarded-host': BRANCH, origin: 'https://' + BRANCH })).json.ok, false, 'a forwarded-host header does not count');
+      assert.equal((await results({ host: BRANCH })).json.ok, false, 'no Origin header: refused (another site could have sent it)');
+      assert.equal((await results({ host: BRANCH, origin: 'https://evil.example' })).json.ok, false, 'from another site: refused');
+      const ok = await results({ host: BRANCH, origin: 'https://' + BRANCH });
+      assert.equal(ok.json.ok, true, JSON.stringify(ok.json));
+      assert.equal(ok.json.formA.n, 1);
+      assert.equal(ok.json.respondents[0].email, mail(0));
+      assert.equal((await results({ host: DEPLOY, origin: 'https://' + DEPLOY })).json.ok, true, 'the deployment’s own address is protected too');
+      assert.equal((await callVercel(handler, 'GET', '/api?action=config', undefined, { host: BRANCH })).json.researcher, 'signed-in');
+    });
+  } finally { restore(); }
+});
+
+test('[vercel] if Vercel’s sign-in protection is off, or cannot be checked, the private address is not trusted', async () => {
+  for (const answer of ['off', 'error']) {
+    const { handler, restore } = freshHandler(blobEnv, createBlobFake().sdk);
+    try {
+      await withProtection(answer, async () => {
+        const r = await callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'results' }), { host: BRANCH, origin: 'https://' + BRANCH });
+        assert.equal(r.json.ok, false, answer);
+      });
+    } finally { restore(); }
+  }
+});
+
+test('[vercel] a researcher key, if set, works from the public address too', async () => {
+  const { handler, restore } = freshHandler({ ...blobEnv, RESEARCHER_KEY: 'a-long-researcher-key' }, createBlobFake().sdk);
+  try {
+    assert.equal((await callVercel(handler, 'GET', '/api?action=config')).json.researcher, 'key');
+    assert.equal((await callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'results', key: 'wrong' }))).json.ok, false);
+    assert.equal((await callVercel(handler, 'POST', '/api', JSON.stringify({ action: 'results', key: 'a-long-researcher-key' }))).json.ok, true);
+  } finally { restore(); }
+});
+
+test('[vercel] GitHub storage instead, when a GitHub token is set', async () => {
   const repo = mock.createRepo('vercel', true);
   const realFetch = global.fetch;
   // send the function's calls to api.github.com to the stand-in instead

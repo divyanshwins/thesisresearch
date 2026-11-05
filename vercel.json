@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "",
   "outputDirectory": "docs",
+  "regions": ["bom1"],
   "functions": {
     "api/index.js": { "maxDuration": 30, "includeFiles": "backend/**" }
   },

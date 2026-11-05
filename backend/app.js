@@ -23,11 +23,14 @@ function withDefaults(state) {
 }
 
 /**
- * opts: { store, researcherKey, missing }. missing lists settings that are not set yet; while it
- * is not empty the forms run as a preview and nothing can be saved.
+ * opts: { store, researcherKey, missing, researcherUrl }. missing lists settings that are not set
+ * yet; while it is not empty the forms run as a preview and nothing can be saved.
+ * A researcher is let in either by the key, or because the request came through an address that
+ * only the project owner can open (meta.trusted, decided by api/index.js); researcherUrl is that
+ * address, shown on the public analytics page.
  */
 function createApp(opts) {
-  const store = opts.store, missing = opts.missing || [];
+  const store = opts.store, missing = opts.missing || [], researcherUrl = opts.researcherUrl || null;
   const keyHash = opts.researcherKey ? crypto.createHash('sha256').update(String(opts.researcherKey)).digest() : null;
   const wrongKeyDelay = opts.wrongKeyDelay === undefined ? 400 : opts.wrongKeyDelay;
 
@@ -49,16 +52,21 @@ function createApp(opts) {
     return { formA: all.formA, formB: all.formB, codes: state.codes, assignments: state.assignments, config: state.config };
   }
 
-  async function get(params) {
+  async function get(params, meta) {
     params = params || {};
     const action = params.action || 'ping';
     if (action === 'ping') return { ok: true, service: 'thesis-research' };
     if (action !== 'config') return { ok: false, error: 'Unknown action.' };
     if (missing.length) return { ok: true, configured: false, missing };
-    return publicConfig((await readState()).state.config);
+    // the public form settings may come from the cache (a change shows within a minute), which keeps
+    // every form opening from counting against the storage allowance
+    const cfg = publicConfig(withDefaults((await store.readState(false)).state).config);
+    cfg.researcher = meta && meta.trusted ? 'signed-in' : keyHash ? 'key' : 'private-address';
+    cfg.researcherUrl = researcherUrl;
+    return cfg;
   }
 
-  async function post(body) {
+  async function post(body, meta) {
     if (!body) return { ok: false, error: 'Empty request.' };
     if (body.length > MAX_BODY_CHARS) return { ok: false, error: 'Request too large.' };
     let req;
@@ -69,9 +77,9 @@ function createApp(opts) {
     if (action === 'submitA') return submitA(req.payload);
     if (action === 'submitB') return submitB(req.payload);
     if (RESEARCHER_ACTIONS.indexOf(action) < 0) return { ok: false, error: 'Unknown action.' };
-    if (!keyOk(req.key)) {
+    if (!(meta && meta.trusted) && !keyOk(req.key)) {
       if (wrongKeyDelay) await new Promise((r) => setTimeout(r, wrongKeyDelay));   // slows guessing
-      return { ok: false, error: 'Wrong researcher key.' };
+      return { ok: false, error: keyHash ? 'Wrong researcher key.' : 'Analytics opens only at the study’s private address' + (researcherUrl ? ' (' + researcherUrl + ')' : '') + ', where Vercel asks you to sign in.' };
     }
     try {
       if (action === 'results') return await results(req);

@@ -32,6 +32,9 @@
         API.missing = data.missing || [];
         if (window.PREVIEW_CONFIG) { API.preview = true; return copy(window.PREVIEW_CONFIG); }
       }
+      // how the analytics page lets the researcher in: 'signed-in' (this is the private address),
+      // 'key' (a researcher key is set), or 'private-address' (open analytics at researcherUrl)
+      if (action === 'config') { API.researcher = data.researcher || null; API.researcherUrl = data.researcherUrl || null; }
       return data;
     });
   }

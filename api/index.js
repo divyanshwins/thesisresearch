@@ -1,30 +1,81 @@
 'use strict';
 /**
  * api/index.js: the Vercel function at /api. It connects the request handling in
- * backend/app.js to the private data repository on GitHub.
+ * backend/app.js to the study's private storage.
  *
- * Settings, in Vercel → Project → Settings → Environment Variables (never in this repository):
- *   GITHUB_TOKEN    a fine-grained GitHub token with Contents: read and write on the data repository only
- *   RESEARCHER_KEY  the password for the analytics page, at least 16 characters
- *   DATA_REPO       optional: owner/name of the data repository (default below)
- * Until both secrets are set, the forms run as a preview and nothing can be saved.
+ * Storage, chosen from what is connected in Vercel (nothing secret is in this repository):
+ *   - a private Vercel Blob store connected to the project (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN,
+ *     both added by Vercel itself when the store is connected), or
+ *   - a private GitHub repository, if GITHUB_TOKEN is set (DATA_REPO names it).
+ *
+ * Who may use the researcher actions (results, coding, freeze, export, withdraw):
+ *   - anyone who reaches this function through one of the project's own Vercel addresses (the
+ *     branch address, or this deployment's address). Vercel Deployment Protection lets only the
+ *     owner's Vercel account open those, and this file checks that the protection is really on;
+ *   - or, if RESEARCHER_KEY is set (at least 16 characters), anyone with that key.
+ * The public address (the production domain) never gets researcher access without the key.
  */
 const { createApp } = require('../backend/app');
-const { githubStore } = require('../backend/store-github');
 
 const DEFAULT_DATA_REPO = 'divyanshwins/thesisresearch-data';
 const MIN_KEY_LENGTH = 16;
 const MAX_BODY_BYTES = 400000;
+const PROTECTION_RECHECK_MS = 5 * 60 * 1000;
 
-let app = null;
+let app = null, protection = { at: 0, on: false };
+
+function privateHosts() {
+  return [process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL].filter(Boolean).map((h) => h.toLowerCase());
+}
+function publicHosts() {
+  return [process.env.VERCEL_PROJECT_PRODUCTION_URL].filter(Boolean).map((h) => h.toLowerCase());
+}
+
 function getApp() {
   if (app) return app;
   const env = process.env, missing = [];
-  if (!env.GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
-  if (!env.RESEARCHER_KEY || env.RESEARCHER_KEY.length < MIN_KEY_LENGTH) missing.push('RESEARCHER_KEY (at least ' + MIN_KEY_LENGTH + ' characters)');
-  const store = env.GITHUB_TOKEN ? githubStore({ token: env.GITHUB_TOKEN, repo: env.DATA_REPO || DEFAULT_DATA_REPO }) : null;
-  app = createApp({ store, researcherKey: missing.length ? null : env.RESEARCHER_KEY, missing });
+  let store = null;
+  if (env.GITHUB_TOKEN) {
+    store = require('../backend/store-github').githubStore({ token: env.GITHUB_TOKEN, repo: env.DATA_REPO || DEFAULT_DATA_REPO });
+  } else if (env.BLOB_STORE_ID || env.BLOB_READ_WRITE_TOKEN) {
+    store = require('../backend/store-blob').blobStore();
+  } else {
+    missing.push('a private Vercel Blob store connected to the project');
+  }
+  const key = env.RESEARCHER_KEY && env.RESEARCHER_KEY.length >= MIN_KEY_LENGTH ? env.RESEARCHER_KEY : null;
+  const branch = env.VERCEL_BRANCH_URL;
+  app = createApp({ store, researcherKey: key, missing, researcherUrl: branch ? 'https://' + branch + '/analytics.html' : null });
   return app;
+}
+
+/**
+ * Is Vercel's login protection on for the private address? Asks for it without any credentials:
+ * a protected address answers with a redirect to Vercel's sign-in (or 401); an open one answers 200.
+ * Fails closed: if the check cannot be made, the address is not trusted.
+ */
+async function protectionOn() {
+  const host = process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL;
+  if (!host) return false;
+  if (Date.now() - protection.at < PROTECTION_RECHECK_MS) return protection.on;
+  let on = false;
+  try {
+    const r = await fetch('https://' + host + '/api?action=ping', { redirect: 'manual', signal: AbortSignal.timeout(4000) });
+    on = r.status === 401 || r.status === 403 || ((r.status === 302 || r.status === 307) && /vercel\.com\/(sso|login)/.test(r.headers.get('location') || ''));
+  } catch (e) { on = false; }
+  protection = { at: Date.now(), on };
+  return on;
+}
+
+/**
+ * The request is trusted when it arrived on one of the project's private addresses, came from a page
+ * on that same address (the Origin header, which a browser always sends with a POST and another site
+ * cannot set), and Vercel's login protection is on.
+ */
+async function trusted(req, isPost) {
+  const host = String(req.headers.host || '').toLowerCase();
+  if (!host || publicHosts().includes(host) || !privateHosts().includes(host)) return false;
+  if (isPost && req.headers.origin !== 'https://' + host) return false;
+  return protectionOn();
 }
 
 /** The raw request body as text, whether or not Vercel has already parsed it. */
@@ -40,16 +91,18 @@ function bodyText(req) {
   });
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   let out;
   try {
     if (req.method === 'GET') {
       const params = req.query || Object.fromEntries(new URL(req.url, 'http://localhost').searchParams);
-      out = await getApp().get(params);
+      // the ping is what protectionOn() asks for, so it must not depend on it
+      out = await getApp().get(params, params.action === 'config' ? { trusted: await trusted(req, false) } : {});
     } else if (req.method === 'POST') {
-      out = await getApp().post(await bodyText(req));
+      const body = await bodyText(req);
+      out = await getApp().post(body, { trusted: await trusted(req, true) });
     } else {
       res.statusCode = 405;
       out = { ok: false, error: 'Method not allowed.' };
@@ -58,4 +111,7 @@ module.exports = async function handler(req, res) {
     out = { ok: false, error: String(err && err.message ? err.message : err) };
   }
   res.end(JSON.stringify(out));
-};
+}
+
+module.exports = handler;
+module.exports._reset = () => { app = null; protection = { at: 0, on: false }; };
