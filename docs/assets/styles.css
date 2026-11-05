@@ -278,3 +278,9 @@ select.code { min-width: 190px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+/* A participant can print or save the information sheet: only the sheet itself, in black on white. */
+@media print {
+  .bar, .progress, .nav, .linkbtn, .notice-test, .opts, .q:not(.info) { display: none !important; }
+  body, .sheet { background: #fff !important; color: #000 !important; box-shadow: none !important; border: 0 !important; }
+  .sheet { max-width: none; margin: 0; padding: 0; }
+}

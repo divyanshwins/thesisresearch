@@ -66,15 +66,47 @@ test('email: required on the same page as the screening questions, after them, a
   for (const bad of ['', 'a', 'a@b', 'a@b.', 'a@.com', 'a b@c.com', 'a@b..com', '@b.com', 'a@@b.com']) assert.ok(!E.EMAIL_RE.test(bad), bad);
 });
 
-test('the consent page names the email, who sees it, its deletion and how to withdraw', () => {
+test('the consent page carries every element ICMR (2017) requires of an informed consent document', () => {
+  // ICMR National Ethical Guidelines 2017, Box 5.1, as summarised in Table 3 of the "Highlights" article (PMC6644181)
+  const elements = {
+    'a statement that it is research': 'this is a research study',
+    'purpose': 'what this study is about',
+    'methods': 'you will',
+    'duration': 'minutes',
+    'the data collected': 'what is recorded',
+    'foreseeable discomfort': 'discomfort',
+    'benefits': 'benefit',
+    'confidentiality': 'never shared',
+    'payment and compensation': 'no payment or other compensation',
+    'the right to withdraw without consequences': 'no consequences',
+    'how to withdraw later': 'removed',
+    'identity of the research team and contacts': '{who}',
+    'the ethics approval': '{ethics}'
+  };
   for (const page of [Q.formA.pages[0], Q.formB.consent]) {
     assert.match(page.title, /consent/i);
-    const text = page.questions[0].paragraphs.join(' ').toLowerCase();
-    for (const must of ['voluntary', 'email address', 'name is optional', 'only the researcher', 'never shared', 'deleted', 'removed', 'group results']) {
+    const info = page.questions[0];
+    const text = info.paragraphs.join(' ').toLowerCase();
+    for (const [what, phrase] of Object.entries(elements)) assert.ok(text.includes(phrase), 'consent covers ' + what);
+    for (const must of ['voluntary', 'email address', 'name is optional', 'only the research team', 'deleted', 'group results', 'mumbai, india']) {
       assert.ok(text.includes(must), 'consent says "' + must + '"');
     }
     assert.ok(!/do not ask for your name/.test(text), 'no leftover promise of anonymity');
+    assert.match(info.version, /version \d+\.\d+, \d{1,2} \w+ \d{4}/, 'the sheet carries a version and date');
+    assert.equal(info.printable, true, 'the participant can keep a copy');
+    assert.match(page.questions[1].prompt, /you confirm that you have read this information/);
   }
+});
+
+test('the study details shown on the consent page name no safety topic before Block 2', () => {
+  const cctx = { window: {}, location: { hostname: 'x' } };
+  vm.createContext(cctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../docs/assets/config.js'), 'utf8'), cctx);
+  const st = plain(cctx.window.APP_CONFIG.study);
+  assert.ok(st.researcher && st.institution && st.contact, 'the research team and a contact are filled in');
+  assert.match(st.contact, /^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+  const all = Object.values(st).join(' ').toLowerCase();
+  for (const w of E.THREAT_WORDS.concat(E.CRITERION_WORDS, ['harm', 'incident', 'secur'])) assert.ok(!new RegExp('(^|[^a-z])' + w).test(all), 'config.study contains "' + w + '"');
 });
 
 test('page ids are valid timing keys and unique', () => {

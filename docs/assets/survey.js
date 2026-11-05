@@ -37,18 +37,29 @@
     return a;
   }
 
-  /** The study's own details from config.js, as one line for the consent page; null if none is filled in. */
-  function studyLine() {
-    var st = (window.APP_CONFIG && window.APP_CONFIG.study) || {};
-    var parts = [];
-    if (st.researcher || st.institution) parts.push('Study by ' + [st.researcher, st.institution].filter(Boolean).join(', ') + '.');
-    if (st.contact) parts.push('Questions about the study: ' + st.contact + '.');
-    if (st.ethicsRef) parts.push('Ethics approval: ' + st.ethicsRef + '.');
-    return parts.length ? parts.join(' ') : null;
+  /**
+   * The consent page's study details from config.js: {who} names the research team and the contact,
+   * {ethics} the approval. Each returns null while its details are missing, and the paragraph is left out.
+   */
+  function study() { return (window.APP_CONFIG && window.APP_CONFIG.study) || {}; }
+  function studyParagraph(token) {
+    var st = study();
+    if (token === '{who}') {
+      if (!st.researcher) return null;
+      var team = [st.researcher, st.role, st.department, st.institution].filter(Boolean).join(', ');
+      return '**Who is doing it.** ' + team + (st.supervisor ? ', supervised by ' + st.supervisor : '') + '.' +
+        (st.contact ? ' For any question about the study, write to ' + st.contact + '.' : '');
+    }
+    if (token === '{ethics}') {
+      if (!st.ethicsRef || !st.ethicsCommittee) return null;
+      return '**Ethics approval.** This study was approved by ' + st.ethicsCommittee + ' (reference ' + st.ethicsRef + ').' +
+        (st.ethicsContact ? ' For a concern about your rights as a participant, contact the committee at ' + st.ethicsContact + '.' : '');
+    }
+    return token;
   }
   function missingStudyInfo() {
-    var st = (window.APP_CONFIG && window.APP_CONFIG.study) || {};
-    return ['researcher', 'institution', 'contact', 'ethicsRef'].filter(function (k) { return !st[k]; });
+    var st = study();
+    return ['researcher', 'institution', 'contact', 'supervisor', 'ethicsCommittee', 'ethicsRef', 'ethicsContact'].filter(function (k) { return !st[k]; });
   }
 
   // Five boxes are shown and a new one opens when the last is filled, up to ten.
@@ -122,7 +133,7 @@
       if (opts.testMode && firstPage) {
         if (!preview) sheet.appendChild(h('div', { class: 'notice-test', text: 'Test mode: this response is saved as a test and left out of the results.' }));
         var miss = missingStudyInfo();
-        if (miss.length) sheet.appendChild(h('div', { class: 'notice-test', text: 'Before launch, fill in study.' + miss.join(', study.') + ' in assets/config.js. The consent page must name the researcher, a contact and the ethics approval.' }));
+        if (miss.length) sheet.appendChild(h('div', { class: 'notice-test', text: 'Before launch, fill in study.' + miss.join(', study.') + ' in assets/config.js. The consent page must name the research team, a contact and the ethics approval with its committee’s contact.' }));
       }
       children.forEach(function (c) { sheet.appendChild(c); });
       root.appendChild(sheet);
@@ -133,9 +144,10 @@
       var box;
       var errId = 'err-' + (q.id || Math.random().toString(36).slice(2));
       if (q.type === 'info') {
-        var info = h('div', { class: 'q info' }, q.paragraphs.map(function (t) { return h('p', {}, rich(t)); }));
-        var line = q.studyInfo ? studyLine() : null;
-        if (line) info.appendChild(h('p', { class: 'study', text: line }));
+        var info = h('div', { class: 'q info' }, q.paragraphs.map(studyParagraph).filter(Boolean).map(function (t) { return h('p', {}, rich(t)); }));
+        // a participant should be able to keep a copy of the information sheet
+        if (q.version || q.printable) info.appendChild(h('p', { class: 'study' }, [q.version || '', q.printable ? ' ' : '',
+          q.printable ? h('button', { class: 'linkbtn', type: 'button', text: 'Save or print this information', onclick: function () { window.print(); } }) : null]));
         return info;
       }
       if (q.type === 'single' || q.type === 'multi') {

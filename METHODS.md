@@ -63,13 +63,30 @@ The two episode questions and the two lists look alike on purpose: asking the sa
 - **What the consent says.** The Form A consent describes the study as "how women choose which roads to use in everyday travel". It does not use the word safety. If it did, Block 1 would no longer be unprimed, and the unprimed hypothesis check would be invalid.
 - **When safety is disclosed.** Safety is named at the start of Block 2, together with a reminder that any question can be skipped. After submitting, the respondent sees a debrief explaining the order.
 - **Ethics approval.** This is incomplete disclosure. It needs the explicit approval of the institute ethics committee; the ICMR (2017) national guidelines have provisions for it ◐. If the committee requires the topic to be named up front, put the safety sentence back in the consent. Then report the unprimed check as primed, or drop it.
-- **What else the consent page states** (titled "Information and consent" in both forms).
-  - Participation is voluntary, and the respondent can stop at any time.
-  - Apart from the email and the three screening questions, every question can be skipped.
-  - Why the email is asked, who sees it, that it is never shared or reported and is deleted when the study ends, and how to have her answers removed.
-  - Answers are reported as group results; short quotations may be used without anything that identifies her.
-  - Nothing is sent until she presses Submit, and answers are kept on the device until then.
-- **Researcher details.** The researcher, a contact and the ethics approval reference come from `config.js`. Test mode warns while any of them is empty.
+- **The consent page is a participant information sheet with an electronic consent** (titled "Information and consent", version 3.0, dated 5 November 2026). It follows the elements the ICMR National Ethical Guidelines (2017, Box 5.1) require of an informed consent document ◐ (checked through the summary in PMC6644181, Table 3; check Box 5.1 in the original):
+
+  | ICMR element | Where it is on the page |
+  |---|---|
+  | A statement that this is research | "What this study is about": "This is a research study about…" |
+  | Purpose and methods | Same paragraph: the topic, and "You will answer short questions…" (Form B: "compare sets of four features of a road") |
+  | Duration and data collected | "about 5 minutes" (Form B: 7); "What is recorded": answers, email, optional name, page times |
+  | Foreseeable discomfort | "Possible discomfort and benefit": no known disadvantage beyond the time; skip or stop if a question feels uncomfortable |
+  | Benefits | Same paragraph: no direct benefit; may help plan roads and routes that better suit women's needs |
+  | Confidentiality | "What is recorded, and who sees it": the research team only; kept apart from the answers; never reported or shared; stored on a private server in Mumbai, India |
+  | Payment and compensation | "There is no payment or other compensation for taking part." |
+  | Voluntary participation and withdrawal | "Taking part is voluntary": skip, stop, no consequences; "Withdrawing later": removal on request before publication |
+  | Research team and contacts | "Who is doing it": researcher, programme, department, institution, supervisor, contact email (from `config.js`) |
+  | Ethics approval | "Ethics approval": committee, reference and the committee's contact for concerns about participants' rights (from `config.js`; shown only once filled in) |
+
+  - **The consent declaration** is one choice: "By choosing 'I agree', you confirm that you have read this information, that you are taking part voluntarily, and that your answers may be used as described." Electronic consent needs the ethics committee's approval (ICMR 2017 ◐).
+  - **A copy to keep.** "Save or print this information" prints the sheet alone.
+  - **Wording.** No sentence before Block 2 of Form A names safety, a threat, harm or risk (a test checks every word, the study details included). The discomfort statement is therefore written as "no known disadvantages… if a question feels uncomfortable", which keeps the required information without priming the unprimed block.
+- **Researcher details.** These come from `config.js`:
+  - **filled in:** researcher, programme, department, institution and contact;
+  - **still to add:** the supervisor, and the ethics committee's name, approval reference and contact, after approval.
+
+  Test mode warns while any of them is empty, and the ethics paragraph is not shown until all three ethics fields are filled.
+- **Language.** The forms are in English only. Several Indian institutes ask for the information sheet in English and in the local language as well (IIT Kanpur and IIT Delhi state this in their submission formats ◐). If the committee asks for Hindi, the sheet and the questions need forward and back translation before fielding.
 
 ### Email address: one response per person, and two separate samples
 - **What is asked.** An email address (required) and a name (optional), on the "About you" page, after the three screening questions, so that a woman who is screened out is never asked for them.

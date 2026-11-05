@@ -42,22 +42,35 @@
   var END_TEXT = 'Thank you for your interest. This survey is for women aged 18 or over who use public roads, so there are no more questions for you. Nothing you entered has been saved.';
   var END_CONSENT = 'Thank you. You chose not to take part, so nothing has been saved.';
 
-  // Shared consent paragraphs. Form A names its topic without the word "safety",
-  // so that Block 1 is unprimed; safety is disclosed at the start of Block 2 and
-  // the reason is explained in the debrief (incomplete disclosure: needs ethics approval).
-  var VOLUNTARY = 'Taking part is voluntary. Apart from your email address and three short questions about who the survey is for, you can skip any question. You can stop at any time by closing this page. Nothing is sent until you press Submit at the end.';
-  // Responses are confidential, not anonymous: the email identifies the person, so the text says who sees it,
-  // what it is for, that it is deleted, and how to withdraw.
-  var IDENTITY = 'We ask for your email address so that we know who has taken part and no one is counted twice. Your name is optional. Only the researcher sees these details. They never appear in any report, are never shared, and are deleted when the study ends. To have your answers removed, write to the study contact before the results are published, giving the email address you used.';
-  var USE = 'Your answers are used only for research and are reported as group results. Short quotations from what you write may be used, without anything that could identify you. Please do not write other people’s names or exact addresses.';
-  var DEVICE = 'Your answers are kept on this device until you submit, so that reloading the page does not lose them.';
-  var CONSENT_A = ['This study is about how women choose which roads to use in everyday travel. It takes about 5 minutes.', VOLUNTARY, IDENTITY, USE, DEVICE];
-  var CONSENT_B = ['This study is about what matters to women when they decide whether a road is safe enough to use. It takes about 7 minutes.', VOLUNTARY, IDENTITY, USE, DEVICE];
+  // The participant information sheet and consent, with the elements the ICMR National Ethical
+  // Guidelines (2017) require of an informed consent document: that it is research; purpose and
+  // methods; duration and the data collected; discomfort and benefits; confidentiality; payment and
+  // compensation; the right to withdraw; and who the research team is, with contacts. {who} and
+  // {ethics} are filled in from config.js. Form A names its topic without the word "safety", so that
+  // Block 1 is unprimed; safety is disclosed at the start of Block 2 and the reason is explained in the
+  // debrief (incomplete disclosure: needs ethics approval). No word before Block 2 may name safety,
+  // a threat or harm (test/forms.test.js checks every one).
+  var SHEET_VERSION = 'Participant information sheet, version 3.0, 5 November 2026.';
+  function consentParagraphs(about, method, minutes) {
+    return [
+      '**What this study is about.** This is a research study about ' + about + '. ' + method + ' It takes about ' + minutes + ' minutes.',
+      '{who}',
+      '**Taking part is voluntary.** Apart from your email address and three short questions about who the survey is for, you can skip any question. You can stop at any time by closing this page; nothing is sent until you press Submit at the end. Deciding not to take part, or stopping, has no consequences for you. There is no payment or other compensation for taking part.',
+      '**Possible discomfort and benefit.** There are no known disadvantages beyond the few minutes it takes. If a question feels uncomfortable, skip it or stop. There is no direct benefit to you; your answers may help plan roads and routes that better suit women’s needs.',
+      '**What is recorded, and who sees it.** Your answers, your email address, your name if you give it, and how long each page took. We ask for your email address so that we know who has taken part and no one is counted twice. Your name is optional. Only the research team sees your email and name: they are kept apart from your answers, never appear in any report and are never shared. Everything is stored on a private server in Mumbai, India.',
+      '**How your answers are used.** Only for research, reported as group results in a thesis and research papers. Short quotations from what you write may be used, without anything that could identify you. Please do not write other people’s names or exact addresses.',
+      '**Withdrawing later.** To have your answers removed, write to the contact above before the results are published, giving the email address you used. Email addresses and names are deleted when the study ends; the answers without them are kept as research records.',
+      'Your answers are kept on this device until you submit, so that reloading the page does not lose them.',
+      '{ethics}'
+    ];
+  }
+  var CONSENT_A = consentParagraphs('how women choose which roads to use in everyday travel', 'You will answer short questions, some of them in your own words.', 5);
+  var CONSENT_B = consentParagraphs('what matters to women when they decide whether a road is safe enough to use', 'You will compare sets of four features of a road and answer a few short questions.', 7);
 
   function consentPage(paragraphs) {
     return { id: 'consent', title: 'Information and consent', questions: [
-      { type: 'info', paragraphs: paragraphs, studyInfo: true },
-      { type: 'single', id: 'consent', prompt: 'Having read this, do you agree to take part?', options: O.consent, required: true, endText: END_CONSENT }
+      { type: 'info', paragraphs: paragraphs, version: SHEET_VERSION, printable: true },
+      { type: 'single', id: 'consent', prompt: 'By choosing “I agree”, you confirm that you have read this information, that you are taking part voluntarily, and that your answers may be used as described. Do you agree to take part?', options: O.consent, required: true, endText: END_CONSENT }
     ] };
   }
   // The email comes after the three screening questions, so that no one who is screened out is asked for it.
