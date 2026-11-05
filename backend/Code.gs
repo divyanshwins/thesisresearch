@@ -1,7 +1,7 @@
 /**
  * Code.gs: the web-app backend (Google Apps Script + Google Sheets).
  *
- * Storage: one Google Sheet with five tabs. Each data row holds one JSON
+ * Storage: one Google Sheet with six tabs. Each data row holds one JSON
  * object in column A, so Sheets never reformats an answer (dates, numbers,
  * formulas). All maths is in Engine.gs.
  *
@@ -10,7 +10,7 @@
  * saveCodes, freeze, unfreeze, setFormA.
  */
 
-var SHEET_NAMES = { A: 'FormA', B: 'FormB', CODES: 'Codes', ASSIGN: 'Assignments', CONFIG: 'Config' };
+var SHEET_NAMES = { A: 'FormA', B: 'FormB', CODES: 'Codes', ASSIGN: 'Assignments', CONFIG: 'Config', HISTORY: 'FreezeHistory' };
 var MAX_BODY_CHARS = 200000;
 var DEFAULT_CONFIG = { formAOpen: true, freeze: null, lastDesignVersion: 0 };
 
@@ -50,7 +50,7 @@ function doPost(e) {
     if (['results', 'exportData', 'saveCodes', 'freeze', 'unfreeze', 'setFormA'].indexOf(action) < 0) return { ok: false, error: 'Unknown action.' };
     var key = PropertiesService.getScriptProperties().getProperty('RESEARCHER_KEY');
     if (!key || req.key !== key) return { ok: false, error: 'Wrong researcher key.' };
-    if (action === 'results') return results_();
+    if (action === 'results') return results_(req);
     if (action === 'exportData') return exportData_();
     if (action === 'saveCodes') return withLock_(function () { return saveCodes_(req); });
     if (action === 'freeze') return withLock_(function () { return freeze_(req); });
@@ -100,12 +100,13 @@ function loadAll_(ss) {
   };
 }
 
-function results_() {
-  return Engine.buildResults(loadAll_(ss_()));
+function results_(req) {
+  return Engine.buildResults(loadAll_(ss_()), { includeTest: req.includeTest === true });
 }
 
 function exportData_() {
-  var d = loadAll_(ss_());
+  var ss = ss_(), d = loadAll_(ss);
+  d.config.history = (d.config.history || []).concat(readJson_(ss, SHEET_NAMES.HISTORY));
   d.ok = true;
   return d;
 }
@@ -162,15 +163,16 @@ function freeze_(req) {
   var ss = ss_();
   var cfg = readConfig_(ss);
   if (cfg.freeze) return { ok: false, error: 'Form B is already open. Unfreeze it first.' };
-  var res = Engine.buildResults(loadAll_(ss));
+  var res = Engine.buildResults(loadAll_(ss));                 // real responses only, never tests
   var f = Engine.buildFreeze(res, Number(req.k), cfg.lastDesignVersion || 0, Date.now());
   if (!f.ok) return f;
   cfg.freeze = f.freeze;
   cfg.lastDesignVersion = f.freeze.designVersion;
-  // audit trail: what respondents of each version saw
-  cfg.history = (cfg.history || []).concat([{ designVersion: f.freeze.designVersion, frozenAt: f.freeze.frozenAt, rule: f.freeze.rule,
-    items: f.freeze.items.map(function (it) { return { codeId: it.codeId, label: it.label, description: it.description }; }), sets: f.freeze.sets }]);
   writeConfig_(ss, cfg);
+  // audit trail: what respondents of each version saw, one row per version, so the Config cell
+  // stays far below the 50,000-character limit of a Sheets cell however often the list is refrozen
+  appendJson_(ss, SHEET_NAMES.HISTORY, { designVersion: f.freeze.designVersion, frozenAt: f.freeze.frozenAt, rule: f.freeze.rule,
+    items: f.freeze.items.map(function (it) { return { codeId: it.codeId, label: it.label, description: it.description }; }), sets: f.freeze.sets });
   return { ok: true, freeze: f.freeze };
 }
 

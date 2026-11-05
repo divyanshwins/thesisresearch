@@ -44,7 +44,7 @@ test('setup creates the sheets and a researcher key', () => {
   const b = createBackend(null);
   const key = b.ctx.setup();
   assert.match(key, /^[0-9a-f-]{36}$/);
-  for (const s of ['FormA', 'FormB', 'Codes', 'Assignments', 'Config']) assert.ok(b.store.data.sheets[s], s);
+  for (const s of ['FormA', 'FormB', 'Codes', 'Assignments', 'Config', 'FreezeHistory']) assert.ok(b.store.data.sheets[s], s);
   assert.equal(b.get({ action: 'ping' }).ok, true);
   assert.equal(b.get({ action: 'config' }).formB.open, false);
 });
@@ -143,6 +143,20 @@ test('full flow: code entries, freeze top 12, collect Form B, live ranking', () 
   res = b.post({ action: 'results', key: 'k' });
   assert.equal(res.formB.n, 0);
   assert.equal(res.formB.nOtherVersions, 40);
+
+  // the audit trail of what each version showed: one row per version, exported with the config
+  const hist = b.post({ action: 'exportData', key: 'k' }).config.history;
+  assert.deepEqual(hist.map((v) => v.designVersion), [1, 2]);
+  assert.equal(hist[0].items.length, 12);
+  assert.equal(hist[1].items.length, 10);
+  // many refreezes never push the Config cell towards the 50,000-character limit of a Sheets cell
+  for (let v = 0; v < 20; v++) {
+    b.post({ action: 'unfreeze', key: 'k', confirm: 'UNFREEZE' });
+    assert.equal(b.post({ action: 'freeze', key: 'k', k: 12 }).ok, true);
+  }
+  const cells = Object.values(b.store.data.sheets).flat().map((row) => String(row[0]));
+  assert.ok(Math.max(...cells.map((c) => c.length)) < 50000, 'every stored cell is under the Sheets limit');
+  assert.ok(b.store.data.sheets.Config[1][0].length < 10000, 'the Config cell does not grow with the history');
 });
 
 test('closing Form A stops new submissions', () => {
@@ -159,6 +173,25 @@ test('test-mode submissions are stored but left out of the analysis', () => {
   const res = b.post({ action: 'results', key: 'k' });
   assert.equal(res.formA.n, 1);
   assert.equal(res.formA.nTest, 1);
+  assert.equal(res.includesTest, false);
+  // the researcher can include them to check the forms; the count of tests stays the same
+  const withTest = b.post({ action: 'results', key: 'k', includeTest: true });
+  assert.equal(withTest.formA.n, 2);
+  assert.equal(withTest.formA.nTest, 1);
+  assert.equal(withTest.includesTest, true);
+  assert.equal(b.post({ action: 'results', key: 'k', includeTest: 'yes' }).includesTest, false, 'only a strict true includes them');
+});
+
+test('the largest possible Form A record fits in one Sheets cell', () => {
+  const b = fresh();
+  const long = '"'.repeat(2500), short = '"'.repeat(250);     // quotes double in JSON, the worst ordinary case
+  const answers = { ...elig, changedAny: 'yes', storyAny: long, actionsAny: ['other'], actionsAnyOther: short,
+    listAny: Array(12).fill(short), changedSafety: 'yes', storySafety: long, actionsSafety: ['other'], actionsSafetyOther: short, timeSafety: 'dark',
+    listSafety: Array(12).fill(short), afterDark: long, anythingElse: long, city: short, modesOther: short, unclear: long };
+  const pageTimes = Object.fromEntries(Array.from({ length: 50 }, (_, i) => ['page_' + i + '_xxxxxxxxxxxx', 86400000]));
+  assert.equal(b.post({ action: 'submitA', payload: { respondentId: uuid(1), pageTimes, answers } }).ok, true);
+  const cell = String(b.store.data.sheets.FormA[1][0]);
+  assert.ok(cell.length < 50000, 'record is ' + cell.length + ' characters');
 });
 
 test('split entries: an entry coded with several codes, and deleting one of them', () => {

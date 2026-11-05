@@ -46,8 +46,9 @@ Vercel or GitHub Pages (docs/)  --->  Google Apps Script web app (backend/Code.g
    - **GitHub Pages.** On GitHub, open **Settings → Pages**, set **Deploy from a branch** to `main` and `/docs`, and save. The site will be at `https://divyanshwins.github.io/thesisresearch/`.
 
 **3. Check it**
-- Open `form-a.html?test=1` and `form-b.html?test=1`. With `?test=1` your answers are stored as tests and never analysed.
-- Open `analytics.html` and enter the researcher key.
+- Open `form-a.html?test=1` and `form-b.html?test=1`. With `?test=1` your answers are stored as tests and left out of every result.
+- Open `analytics.html` and enter the researcher key. Tick **Include tests** in the top bar to see the test answers go through coding and the ranking. A banner stays up while it is on, and freezing always ignores tests. Untick it before reading any result.
+- `form-b.html?preview=1` shows Form B with the placeholder items, even before the list is frozen. Nothing is sent. Use it to show someone the format.
 
 **If you change the backend code later:** use Deploy → Manage deployments → edit (pencil) → Version: New version. The URL stays the same.
 

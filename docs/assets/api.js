@@ -12,7 +12,8 @@
   }
   // With no backend address the forms run as a preview from assets/preview.js:
   // they work page by page, say so on every page, and send nothing.
-  var preview = !apiUrl() && !!window.PREVIEW_CONFIG;
+  // ?preview=1 shows the same preview on a connected copy, for showing the format to someone.
+  var preview = !!window.PREVIEW_CONFIG && (!apiUrl() || /[?&]preview=1(&|$)/.test(location.search));
 
   function parse(res) {
     if (!res.ok) throw new Error('The server answered with status ' + res.status + '.');
@@ -56,5 +57,5 @@
     remove: function (k) { try { localStorage.removeItem(k); } catch (e) { /* storage unavailable */ } }
   };
 
-  window.API = { get: get, post: post, uuid: uuid, store: store, preview: preview };
+  window.API = { get: get, post: post, uuid: uuid, store: store, preview: preview, connected: !!apiUrl() };
 })();

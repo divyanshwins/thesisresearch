@@ -195,7 +195,7 @@ Spearman's ρ (the Pearson correlation of ranks, with ties given their average r
   - The device had already submitted Form A.
   - The device had already submitted Form B.
 - **Sensitivity analysis.** Flagged respondents **stay in** the main ranking. The model is re-run without them and the agreement is reported.
-- **Test responses.** Responses sent with `?test=1` are stored but never analysed. A test run records its own device mark, so a demonstration on someone's phone never flags her later real response as a repeat.
+- **Test responses.** Responses sent with `?test=1` are stored but never analysed. A test run records its own device mark, so a demonstration on someone's phone never flags her later real response as a repeat. The analytics page can include test responses on request, to check that the forms reach the analysis; it then says so in a banner, and the freeze always runs on real responses only.
 
 ### M14. Position check ◻ (test) / ✔ (calibrated here)
 - **What is counted.** Choices of most and least by screen position. With randomised order, each position should be chosen about equally often.

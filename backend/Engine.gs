@@ -842,8 +842,11 @@ var Engine = (function () {
     });
     function codeOf1(key) { return assign[1][key] || null; }
 
+    // Test responses (?test=1) are left out, unless the researcher asks to see them to check the forms.
+    // The freeze always runs without them.
+    var withTest = opts.includeTest === true;
     var allA = data.formA || [];
-    var A = allA.filter(function (r) { return !r.test; });
+    var A = allA.filter(function (r) { return withTest || !r.test; });
     A.sort(function (x, y) { return x.receivedAt < y.receivedAt ? -1 : x.receivedAt > y.receivedAt ? 1 : 0; });
 
     // --- coding table: distinct entries across both lists ---
@@ -929,7 +932,7 @@ var Engine = (function () {
     function texts(field) { return A.map(function (r) { return r.answers[field]; }).filter(Boolean); }
 
     var formA = {
-      n: A.length, nTest: allA.length - A.length,
+      n: A.length, nTest: allA.filter(function (r) { return r.test; }).length,
       sample: sampleProfile(A),
       premise: premise,
       behaviour: { actionsAny: tally(A, 'actionsAny', OPTIONS.actions, true), actionsSafety: tally(A, 'actionsSafety', OPTIONS.actions, true),
@@ -953,7 +956,7 @@ var Engine = (function () {
                wordingThreat: w.threat, wordingCriterion: w.criterion, wordingProblems: w.threat.concat(w.criterion) };
     });
 
-    var out = { ok: true, generatedAt: new Date(opts.now || Date.now()).toISOString(), formA: formA, formB: null, config: cfg, codes: codes };
+    var out = { ok: true, generatedAt: new Date(opts.now || Date.now()).toISOString(), includesTest: withTest, formA: formA, formB: null, config: cfg, codes: codes };
     out.formB = analyseFormB(data.formB || [], cfg.freeze || null, opts);
     return out;
   }
@@ -962,9 +965,10 @@ var Engine = (function () {
     var fb = { open: !!freeze, freeze: freeze, nAll: allB.length };
     if (!freeze) return fb;
     var K = freeze.items.length;
-    var B = allB.filter(function (r) { return !r.test && r.designVersion === freeze.designVersion; });
+    var withTest = opts.includeTest === true;
+    var B = allB.filter(function (r) { return (withTest || !r.test) && r.designVersion === freeze.designVersion; });
     fb.nTest = allB.filter(function (r) { return r.test; }).length;
-    fb.nOtherVersions = allB.filter(function (r) { return !r.test && r.designVersion !== freeze.designVersion; }).length;
+    fb.nOtherVersions = allB.filter(function (r) { return (withTest || !r.test) && r.designVersion !== freeze.designVersion; }).length;
     fb.n = B.length;
     fb.nAnswered = B.filter(function (r) { return r.bws.some(function (s) { return s.best !== null; }); }).length;
     fb.sample = sampleProfile(B);

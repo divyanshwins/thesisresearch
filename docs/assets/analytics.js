@@ -10,7 +10,7 @@
   var EXCLUDE = '__exclude__', MAX_CODES = 3, K_MIN = 8, K_MAX = 16, MIN_MENTIONS = 2;
   var PLANNED_B = (window.APP_CONFIG && window.APP_CONFIG.plannedSampleB) || 50;
   var S = { key: null, res: null, tab: 'ranking', coder: 1, pending: { 1: {}, 2: {} }, codeEdits: {}, deleted: {},
-            filter: 'uncoded', list: 'all', search: '', auto: false, timer: null, k: 12, busy: false, error: null };
+            filter: 'uncoded', list: 'all', search: '', auto: false, timer: null, k: 12, busy: false, error: null, includeTest: false };
 
   // ---------------------------------------------------------------- helpers
   function session(k, v) {
@@ -20,6 +20,7 @@
   // a true minus sign for negative numbers, so columns of signed figures read cleanly
   function num(x, d) { return x === null || x === undefined || !isFinite(x) ? '–' : Number(x).toFixed(d === undefined ? 2 : d).replace(/^-/, '\u2212'); }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+  function testWord() { return S.res && S.res.includesTest ? 'included' : 'left out'; }
   function pct(p, d) { return p === null || p === undefined || !isFinite(p) ? '–' : (100 * p).toFixed(d === undefined ? 1 : d) + '%'; }
   function ci(w) { return w ? pct(w.p, 0) + ' (95% CI ' + pct(w.lo, 0) + '–' + pct(w.hi, 0) + ')' : '–'; }
   function pval(p) { return p === null || p === undefined ? '–' : p < 0.001 ? 'p < 0.001' : 'p = ' + p.toFixed(3); }
@@ -73,7 +74,7 @@
     S.busy = true;
     var main = document.getElementById('dash');
     if (main) main.style.opacity = '0.6';
-    API.post({ action: 'results', key: S.key }).then(function (res) {
+    API.post({ action: 'results', key: S.key, includeTest: S.includeTest }).then(function (res) {
       S.res = res; S.error = null; S.busy = false;
       session('researcherKey', S.key);
       render();
@@ -108,7 +109,7 @@
   function login(error) {
     app.textContent = '';
     app.appendChild(bar());
-    if (API.preview) {
+    if (!API.connected) {
       app.appendChild(h('div', { class: 'panel login' }, [
         h('h1', { text: 'Analytics' }),
         h('p', { class: 'muted', text: 'This copy is not connected to the study’s backend yet, so there are no results to show. Analytics opens here once apiUrl in assets/config.js holds the Apps Script web-app address.' })
@@ -135,10 +136,13 @@
     app.textContent = '';
     var auto = h('input', { type: 'checkbox', checked: S.auto, id: 'auto' });
     auto.addEventListener('change', function () { setAuto(auto.checked); });
+    var withTest = h('input', { type: 'checkbox', checked: S.includeTest, id: 'withtest' });
+    withTest.addEventListener('change', function () { S.includeTest = withTest.checked; load(); });
     var stamp = new Date(res.generatedAt);
     app.appendChild(bar([
       h('span', { class: 'num', text: 'Updated ' + stamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }),
       h('label', { class: 'row auto', for: 'auto' }, [auto, 'Every minute']),
+      h('label', { class: 'row', for: 'withtest' }, [withTest, 'Include tests']),
       h('button', { class: 'btn small secondary', type: 'button', text: 'Refresh', onclick: function () { load(); } }),
       h('button', { class: 'btn small secondary', type: 'button', text: 'Sign out', onclick: function () { session('researcherKey', null); S.key = null; setAuto(false); login(); } })
     ]));
@@ -151,6 +155,11 @@
     canvas.appendChild(tabs);
     if (S.error) canvas.appendChild(h('div', { class: 'notice-panel', text: 'The last refresh failed (' + S.error + '). The figures below are from ' + stamp.toLocaleString() + '.' }));
     if (S.flash) { canvas.appendChild(h('div', { class: 'notice-panel', text: S.flash })); S.flash = null; }
+    if (res.includesTest) {
+      var nTestB = res.formB && res.formB.nTest ? res.formB.nTest : 0;
+      canvas.appendChild(h('div', { class: 'notice-panel', text: 'Test responses are included (' + res.formA.nTest + ' in Form A, ' + nTestB + ' in Form B' +
+        '). Use this view only to check that the forms reach the analysis. Switch it off before reading or reporting any result. Freezing always uses real responses only.' }));
+    }
     var main = h('div', { id: 'dash' });
     canvas.appendChild(main);
     ({ ranking: renderRanking, formA: renderFormA, coding: renderCoding, setup: renderSetup, quality: renderQuality, export: renderExport })[S.tab](main, res);
@@ -173,7 +182,7 @@
     else finding = 'The model cannot be estimated yet (' + fb.model.status + '), so items are ordered by best-minus-worst score.';
     main.appendChild(titleRow('Final ranking', finding, !fb.nAnswered));
     main.appendChild(kpis([
-      ['Respondents', String(fb.nAnswered), (fb.n - fb.nAnswered ? plural(fb.n - fb.nAnswered, 'respondent', 'respondents') + ' skipped every set; ' : '') + (fb.nTest ? plural(fb.nTest, 'test response', 'test responses') + ' left out' : PLANNED_B + ' planned'), null],
+      ['Respondents', String(fb.nAnswered), (fb.n - fb.nAnswered ? plural(fb.n - fb.nAnswered, 'respondent', 'respondents') + ' skipped every set; ' : '') + (fb.nTest ? plural(fb.nTest, 'test response', 'test responses') + ' ' + testWord() : PLANNED_B + ' planned'), null],
       ['Best-worst choices', String(fb.nChoices), plural(fb.nSkippedSets, 'set', 'sets') + ' skipped'],
       ['Parameters', String(fb.freeze.items.length), 'design version ' + fb.freeze.designVersion],
       ['Model fit', model ? num(fb.model.rho2, 3) : '–', model ? 'McFadden ρ², maxdiff model' : 'not estimable yet']
@@ -235,7 +244,7 @@
       (sat.reached ? 'Saturation reached at respondent ' + sat.point + ' (' + sat.label + ', Guest, Namey & Chen 2020).' : 'Saturation not reached yet.')));
     var y = function (p) { return p.yes ? pct(p.yes.p, 0) : '–'; };
     main.appendChild(kpis([
-      ['Respondents', String(A.n), A.nTest ? plural(A.nTest, 'test response', 'test responses') + ' left out' : null],
+      ['Respondents', String(A.n), A.nTest ? plural(A.nTest, 'test response', 'test responses') + ' ' + testWord() : null],
       ['Changed road, non-distance reason', y(pr.changedRoadAnyReason), pr.changedRoadAnyReason.yes ? '95% CI ' + pct(pr.changedRoadAnyReason.yes.lo, 0) + '–' + pct(pr.changedRoadAnyReason.yes.hi, 0) + ', n = ' + pr.changedRoadAnyReason.n : 'A2.1'],
       ['Changed a trip because of safety', y(pr.changedRoadSafety), pr.changedRoadSafety.yes ? '95% CI ' + pct(pr.changedRoadSafety.yes.lo, 0) + '–' + pct(pr.changedRoadSafety.yes.hi, 0) + ', n = ' + pr.changedRoadSafety.n : 'A3.1'],
       ['Unprimed lists naming safety', pr.unprimedMentionsSafety.ci ? pct(pr.unprimedMentionsSafety.ci.p, 0) : '–', 'before safety was mentioned, n = ' + pr.unprimedMentionsSafety.n]
@@ -478,6 +487,7 @@
       if (c.freq < MIN_MENTIONS) blockers.push('“' + c.label + '” was listed by only ' + c.freq + ' respondent (single mentions are idiosyncratic, Sutrop 2001).');
     });
     if (pendingCount()) blockers.push('Save or discard the unsaved coding changes first.');
+    if (res.includesTest) blockers.push('Switch off “Include tests” first. The list is frozen from real responses only, so the list above may not be the one that would be frozen.');
     if (!A.saturation.primary.reached) warnings.push('Saturation is not reached yet (Guest, Namey & Chen 2020). Freezing now risks missing parameters.');
     if (cands.length > k && Math.abs(cands[k].smithS - cands[k - 1].smithS) < 1e-12) warnings.push('Parameters ' + k + ' and ' + (k + 1) + ' have the same Smith’s S. The tie is broken by frequency, then mean position; report it.');
     var el = A.salience.safety.elbow;
@@ -509,12 +519,12 @@
       : 'Form B is not open yet, so only the Form A checks are shown.';
     main.appendChild(titleRow('Quality', finding, !(fb.open && fb.n)));
     main.appendChild(panel('Form A', [table(['Check', { text: 'Result', num: true }], [
-      ['Test responses (left out)', String(A.nTest)],
+      ['Test responses (' + testWord() + ')', String(A.nTest)],
       ['Relative speed index above 2, about twice the median pace (Leiner 2019)', String(A.speedFlagged)]
     ])], 'Speed index: per page, the sample median time ÷ the respondent’s time, each capped at 3, then averaged over the pages she saw. Reported only; Form A answers are free lists, so speed is not used to drop anyone.'));
     if (fb.open) {
       main.appendChild(panel('Form B', [table(['Check', { text: 'Result', num: true }], [
-        ['Test responses (left out)', String(fb.nTest)],
+        ['Test responses (' + testWord() + ')', String(fb.nTest)],
         ['Responses from earlier design versions (left out)', String(fb.nOtherVersions)],
         ['Respondents who skipped every set', String(fb.n - fb.nAnswered)],
         ['Sets skipped', String(fb.nSkippedSets)],

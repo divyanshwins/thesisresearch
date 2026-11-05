@@ -114,7 +114,7 @@
       root.appendChild(track);
       var sheet = h('div', { class: 'sheet' });
       if (preview && firstPage) {
-        sheet.appendChild(h('div', { class: 'notice-test', text: 'Preview: this copy is not connected to the study’s database, so nothing you enter is saved or sent.' +
+        sheet.appendChild(h('div', { class: 'notice-test', text: 'Preview: nothing you enter here is saved or sent.' +
           (opts.formId === 'B' ? ' The items are placeholders that show the format; the real items come from Form A.' : '') }));
       }
       if (opts.testMode && firstPage) {
