@@ -42,7 +42,7 @@ Vercel or GitHub Pages (docs/)  --->  Google Apps Script web app (backend/Code.g
 4. Leave `plannedSampleB` at 50 unless you planned a different Form B sample in advance. The ranking is marked provisional below it.
 5. Commit and push to GitHub.
 6. Host the `docs/` folder, in either of two ways:
-   - **Vercel.** Import the repository at vercel.com/new. `vercel.json` already sets the output folder to `docs/`, with no build step. Each push to `main` redeploys.
+   - **Vercel** (in use: https://thesisresearch.vercel.app). The repository is connected to the Vercel project `thesisresearch`, so each push to `main` redeploys. `vercel.json` sets the output folder to `docs/`, with no build step. To set it up again elsewhere, import the repository at vercel.com/new.
    - **GitHub Pages.** On GitHub, open **Settings → Pages**, set **Deploy from a branch** to `main` and `/docs`, and save. The site will be at `https://divyanshwins.github.io/thesisresearch/`.
 
 **3. Check it**
