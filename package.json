@@ -1,0 +1,17 @@
+{
+  "name": "thesisresearch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Two-stage survey (free listing + best-worst scaling) with a Google Apps Script backend and live analytics.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "dev": "node dev/server.js",
+    "simulate": "node dev/simulate.js",
+    "power": "node dev/power.js",
+    "crosscheck": "node test/crosscheck/dump.js && python3 test/crosscheck/crosscheck.py"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
