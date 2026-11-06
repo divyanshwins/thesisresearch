@@ -16,7 +16,7 @@ window.APP_CONFIG = {
     department: 'Department of Design',
     institution: 'Indian Institute of Technology Roorkee',
     contact: 'divyansh_s@design.iitr.ac.in',
-    supervisor: '',        // your guide, e.g. 'Prof. A. B. Name, Department of Design, IIT Roorkee'
+    supervisor: 'Prof. Smriti Saraswat, Department of Architecture and Planning, IIT Roorkee',
     ethicsCommittee: '',   // as written on the approval letter, e.g. 'the Institute Human Ethics Committee, IIT Roorkee'
     ethicsRef: '',         // the approval number on that letter
     ethicsContact: ''      // the committee's email address, for participants' concerns about their rights
