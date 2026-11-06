@@ -144,7 +144,17 @@
       var box;
       var errId = 'err-' + (q.id || Math.random().toString(36).slice(2));
       if (q.type === 'info') {
-        var info = h('div', { class: 'q info' }, q.paragraphs.map(studyParagraph).filter(Boolean).map(function (t) { return h('p', {}, rich(t)); }));
+        // q.visible: how many paragraphs are always shown; the rest sit under a "read more" that opens on request
+        var visibleN = q.visible || q.paragraphs.length;
+        var shown = q.paragraphs.slice(0, visibleN).map(studyParagraph).filter(Boolean);
+        var rest = q.paragraphs.slice(visibleN).map(studyParagraph).filter(Boolean);
+        var info = h('div', { class: 'q info' }, shown.map(function (t) { return h('p', {}, rich(t)); }));
+        if (rest.length) {
+          var more = h('details', { class: 'more' }, [h('summary', { text: q.moreLabel || 'Read more' })].concat(rest.map(function (t) { return h('p', {}, rich(t)); })));
+          // printing or saving the sheet always includes all of it
+          window.addEventListener('beforeprint', function () { more.open = true; });
+          info.appendChild(more);
+        }
         // a participant should be able to keep a copy of the information sheet
         if (q.version || q.printable) info.appendChild(h('p', { class: 'study' }, [q.version || '', q.printable ? ' ' : '',
           q.printable ? h('button', { class: 'linkbtn', type: 'button', text: 'Save or print this information', onclick: function () { window.print(); } }) : null]));

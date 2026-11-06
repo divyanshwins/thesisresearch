@@ -55,6 +55,7 @@
     return [
       '**What this study is about.** This is a research study about ' + about + '. ' + method + ' It takes about ' + minutes + ' minutes.',
       '{who}',
+      '**In short:** taking part is voluntary and you can stop at any time. We ask for your email address, which stays private and is never shared. Your answers are used only for research.',
       '**Taking part is voluntary.** Apart from your email address and three short questions about who the survey is for, you can skip any question. You can stop at any time by closing this page; nothing is sent until you press Submit at the end. Deciding not to take part, or stopping, has no consequences for you. There is no payment or other compensation for taking part.',
       '**Possible discomfort and benefit.** There are no known disadvantages beyond the few minutes it takes. If a question feels uncomfortable, skip it or stop. There is no direct benefit to you; your answers may help plan roads and routes that better suit women’s needs.',
       '**What is recorded, and who sees it.** Your answers, your email address, your name if you give it, and how long each page took. We ask for your email address so that we know who has taken part and no one is counted twice. Your name is optional. Only the research team sees your email and name: they are kept apart from your answers, never appear in any report and are never shared. Everything is stored on a private server in Mumbai, India.',
@@ -69,7 +70,8 @@
 
   function consentPage(paragraphs) {
     return { id: 'consent', title: 'Information and consent', questions: [
-      { type: 'info', paragraphs: paragraphs, version: SHEET_VERSION, printable: true },
+      // the first three paragraphs (topic, research team, a summary) are always shown; the full sheet opens on request
+      { type: 'info', paragraphs: paragraphs, visible: 3, moreLabel: 'Read the full information', version: SHEET_VERSION, printable: true },
       { type: 'single', id: 'consent', prompt: 'By choosing “I agree”, you confirm that you have read this information, that you are taking part voluntarily, and that your answers may be used as described. Do you agree to take part?', options: O.consent, required: true, endText: END_CONSENT }
     ] };
   }

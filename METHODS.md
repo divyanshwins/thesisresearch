@@ -79,7 +79,13 @@ The two episode questions and the two lists look alike on purpose: asking the sa
   | Ethics approval | "Ethics approval": committee, reference and the committee's contact for concerns about participants' rights (from `config.js`; shown only once filled in) |
 
   - **The consent declaration** is one choice: "By choosing 'I agree', you confirm that you have read this information, that you are taking part voluntarily, and that your answers may be used as described." Electronic consent needs the ethics committee's approval (ICMR 2017 ◐).
-  - **A copy to keep.** "Save or print this information" prints the sheet alone.
+  - **A copy to keep.** "Save or print this information" prints the sheet alone, opened in full.
+  - **Layered presentation.** Always shown:
+    - the topic;
+    - the research team and contact;
+    - a three-point summary: voluntary, the email is private, research use only.
+
+    The rest of the sheet opens under "Read the full information", so the page is short on a phone while every element stays one tap away. Layered consent of this kind is common in online research; mention it to the ethics committee.
   - **Wording.** No sentence before Block 2 of Form A names safety, a threat, harm or risk (a test checks every word, the study details included). The discomfort statement is therefore written as "no known disadvantages… if a question feels uncomfortable", which keeps the required information without priming the unprimed block.
 - **Researcher details.** These come from `config.js`:
   - **filled in:** researcher, programme, department, institution and contact;

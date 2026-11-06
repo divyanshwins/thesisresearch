@@ -284,3 +284,7 @@ select.code { min-width: 190px; }
   body, .sheet { background: #fff !important; color: #000 !important; box-shadow: none !important; border: 0 !important; }
   .sheet { max-width: none; margin: 0; padding: 0; }
 }
+/* the full participant information, opened on request */
+.q.info details.more { border-top: 1px solid var(--rule); padding: 12px 0 0; margin-top: 4px; }
+.q.info details.more summary { font-size: 16px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; min-height: 44px; display: flex; align-items: center; }
+.q.info details.more[open] summary { margin-bottom: 12px; }
